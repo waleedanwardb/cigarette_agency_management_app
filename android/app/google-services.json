@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "706941445226",
+    "project_id": "waleed-cigarette-agency",
+    "storage_bucket": "waleed-cigarette-agency.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:706941445226:android:4be6b5dd5a2d4fd0911613",
+        "android_client_info": {
+          "package_name": "com.example.cigarette_agency_management_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAkphhyulGeUjV3If1fZQS8no69aHJ-7MI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
