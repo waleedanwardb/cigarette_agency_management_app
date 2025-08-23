@@ -1,15 +1,18 @@
 // lib/services/salesman_service.dart
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:io';
-import 'package:cigarette_agency_management_app/models/salesman.dart';
 import 'package:flutter/foundation.dart';
+
+import 'package:cigarette_agency_management_app/models/salesman.dart';
+import 'package:cigarette_agency_management_app/models/salesman_account_transaction.dart';
+import 'package:cigarette_agency_management_app/models/arrear.dart';
 
 class SalesmanService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final CollectionReference _salesmanCollection = FirebaseFirestore.instance.collection('salesmen');
+  final CollectionReference _arrearCollection = FirebaseFirestore.instance.collection('arrears');
 
   Stream<List<Salesman>> getSalesmen() {
     return _salesmanCollection
@@ -20,65 +23,39 @@ class SalesmanService {
     });
   }
 
-  // FIX: Added optional named parameters for image files
-  Future<void> addSalesman(Salesman salesman, {File? profilePic, File? idFrontPic, File? idBackPic}) async {
-    String? profileImageUrl = salesman.imageUrl;
-    String? idFrontImageUrl;
-    String? idBackImageUrl;
+  Future<void> addSalesman(Salesman salesman, {File? profilePic}) async {
+    final newSalesmanRef = _salesmanCollection.doc();
+    String? imageUrl;
 
-    // Upload images if provided
     if (profilePic != null) {
-      profileImageUrl = await uploadImage(profilePic, 'salesman_profiles/${salesman.id}/profile_pic.jpg');
-    }
-    if (idFrontPic != null) {
-      idFrontImageUrl = await uploadImage(idFrontPic, 'salesman_id_cards/${salesman.id}/id_front.jpg');
-    }
-    if (idBackPic != null) {
-      idBackImageUrl = await uploadImage(idBackPic, 'salesman_id_cards/${salesman.id}/id_back.jpg');
+      imageUrl = await _uploadImage(profilePic, 'salesman_profiles/${newSalesmanRef.id}/profile_pic.jpg');
     }
 
     final salesmanToSave = salesman.copyWith(
-      imageUrl: profileImageUrl,
-      // Assume Salesman model has these fields and update them
-      // idCardFrontImageUrl: idFrontImageUrl,
-      // idCardBackImageUrl: idBackImageUrl,
+      id: newSalesmanRef.id,
+      imageUrl: imageUrl ?? '',
     );
 
-    await _salesmanCollection.doc(salesmanToSave.id).set(salesmanToSave.toFirestore());
+    await newSalesmanRef.set(salesmanToSave.toFirestore());
   }
 
-  // FIX: Added optional named parameters for image files
-  Future<void> updateSalesman(Salesman salesman, {File? profilePic, File? idFrontPic, File? idBackPic}) async {
-    String? profileImageUrl = salesman.imageUrl;
-    String? idFrontImageUrl;
-    String? idBackImageUrl;
+  Future<void> updateSalesman(Salesman salesman, {File? profilePic}) async {
+    String? imageUrl = salesman.imageUrl;
 
     if (profilePic != null) {
-      profileImageUrl = await uploadImage(profilePic, 'salesman_profiles/${salesman.id}/profile_pic.jpg');
-    }
-    if (idFrontPic != null) {
-      idFrontImageUrl = await uploadImage(idFrontPic, 'salesman_id_cards/${salesman.id}/id_front.jpg');
-    }
-    if (idBackPic != null) {
-      idBackImageUrl = await uploadImage(idBackPic, 'salesman_id_cards/${salesman.id}/id_back.jpg');
+      imageUrl = await _uploadImage(profilePic, 'salesman_profiles/${salesman.id}/profile_pic.jpg');
     }
 
-    Map<String, dynamic> updateData = salesman.toFirestore();
-    if (profileImageUrl != null) updateData['profileImageUrl'] = profileImageUrl;
-    // if (idFrontImageUrl != null) updateData['idCardFrontImageUrl'] = idFrontImageUrl;
-    // if (idBackImageUrl != null) updateData['idCardBackImageUrl'] = idBackImageUrl;
-
-    await _salesmanCollection.doc(salesman.id).update(updateData);
+    await _salesmanCollection.doc(salesman.id).update(salesman.copyWith(imageUrl: imageUrl).toFirestore());
   }
 
   Future<void> deleteSalesman(String salesmanId) async {
     await _salesmanCollection.doc(salesmanId).delete();
   }
 
-  // FIX: Renamed _uploadImage to uploadImage and made it public for use in other services if needed.
-  Future<String?> uploadImage(File imageFile, String folderPath) async {
+  Future<String?> _uploadImage(File imageFile, String path) async {
     try {
-      final ref = _storage.ref().child(folderPath);
+      final ref = _storage.ref().child(path);
       final uploadTask = ref.putFile(imageFile);
       final snapshot = await uploadTask.whenComplete(() {});
       final downloadUrl = await snapshot.ref.getDownloadURL();
@@ -87,5 +64,43 @@ class SalesmanService {
       debugPrint('Error uploading image: $e');
       return null;
     }
+  }
+
+  Stream<List<SalesmanAccountTransaction>> getSalesmanTransactions(String salesmanId) {
+    return _salesmanCollection
+        .doc(salesmanId)
+        .collection('transactions')
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) => SalesmanAccountTransaction.fromFirestore(doc.data(), doc.id)).toList();
+    });
+  }
+
+  Future<void> recordSalesmanTransaction({
+    required String salesmanId,
+    required SalesmanAccountTransaction transaction,
+  }) async {
+    final transactionCollection = _salesmanCollection.doc(salesmanId).collection('transactions');
+    await transactionCollection.add(transaction.toFirestore());
+  }
+
+  // New methods for Arrear management
+  Future<void> addArrear(Arrear arrear) async {
+    await _arrearCollection.add(arrear.toFirestore());
+  }
+
+  Future<void> updateArrear(Arrear arrear) async {
+    await _arrearCollection.doc(arrear.id).update(arrear.toFirestore());
+  }
+
+  Future<void> deleteArrear(String arrearId) async {
+    await _arrearCollection.doc(arrearId).delete();
+  }
+
+  Stream<List<Arrear>> getArrears() {
+    return _arrearCollection.snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) => Arrear.fromFirestore(doc.data() as Map<String, dynamic>, doc.id)).toList();
+    });
   }
 }

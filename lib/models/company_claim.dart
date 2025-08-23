@@ -1,22 +1,18 @@
 // lib/models/company_claim.dart
-import 'package:flutter/material.dart'; // For TextDecoration
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CompanyClaim {
   final String id;
-  final String type; // e.g., 'Scheme Amount', 'Car Maintenance', 'Salesman Salary', 'Scheme Amount (Return)'
-  final String description; // Detailed description for display
+  final String type;
+  final String description;
   final double amount;
-  String status; // 'Pending', 'Paid'
+  final String status;
   final DateTime dateIncurred;
-  DateTime? clearanceDate; // When the company cleared it
-  String? clearanceDescription; // Custom description for clearance
-
-  // Specific fields for scheme claims
   final String? brandName;
   final String? productName;
   final List<String>? schemeNames;
-  final double? packsAffected; // Changed to double for consistency with other amounts, if packs can be fractional
-  final String? companyName; // NEW: Company associated with this claim
+  final double? packsAffected;
+  final String? companyName;
 
   CompanyClaim({
     required this.id,
@@ -25,73 +21,69 @@ class CompanyClaim {
     required this.amount,
     required this.status,
     required this.dateIncurred,
-    this.clearanceDate,
-    this.clearanceDescription,
     this.brandName,
     this.productName,
     this.schemeNames,
     this.packsAffected,
-    this.companyName, // Added to constructor
+    this.companyName,
   });
 
-  // Method to mark as cleared
-  // Note: This modifies the object directly. If using immutable state, you'd use copyWith.
-  void markAsCleared({required DateTime date, String? description}) {
-    status = 'Paid';
-    clearanceDate = date;
-    clearanceDescription = description;
-  }
-
-  // Helper to create a copy with updated status/clearance info (good for immutable state)
-  CompanyClaim copyWith({
-    String? status,
-    DateTime? clearanceDate,
-    String? clearanceDescription,
-  }) {
+  factory CompanyClaim.fromFirestore(Map<String, dynamic> data, String id) {
     return CompanyClaim(
       id: id,
-      type: type,
-      description: description,
-      amount: amount,
-      status: status ?? this.status,
-      dateIncurred: dateIncurred,
-      clearanceDate: clearanceDate ?? this.clearanceDate,
-      clearanceDescription: clearanceDescription ?? this.clearanceDescription,
-      brandName: brandName,
-      productName: productName,
-      schemeNames: schemeNames,
-      packsAffected: packsAffected,
-      companyName: companyName,
+      type: data['type'] ?? '',
+      description: data['description'] ?? '',
+      amount: (data['amount'] as num?)?.toDouble() ?? 0.0,
+      status: data['status'] ?? '',
+      dateIncurred: (data['dateIncurred'] as Timestamp).toDate(),
+      brandName: data['brandName'],
+      productName: data['productName'],
+      schemeNames: (data['schemeNames'] as List?)?.map((e) => e.toString()).toList(),
+      packsAffected: (data['packsAffected'] as num?)?.toDouble(),
+      companyName: data['companyName'],
     );
   }
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-          (other is CompanyClaim && runtimeType == other.runtimeType && id == other.id);
+  Map<String, dynamic> toFirestore() {
+    return {
+      'type': type,
+      'description': description,
+      'amount': amount,
+      'status': status,
+      'dateIncurred': Timestamp.fromDate(dateIncurred),
+      if (brandName != null) 'brandName': brandName,
+      if (productName != null) 'productName': productName,
+      if (schemeNames != null) 'schemeNames': schemeNames,
+      if (packsAffected != null) 'packsAffected': packsAffected,
+      if (companyName != null) 'companyName': companyName,
+    };
+  }
 
-  @override
-  int get hashCode => id.hashCode;
+  CompanyClaim copyWith({
+    String? id,
+    String? type,
+    String? description,
+    double? amount,
+    String? status,
+    DateTime? dateIncurred,
+    String? brandName,
+    String? productName,
+    List<String>? schemeNames,
+    double? packsAffected,
+    String? companyName,
+  }) {
+    return CompanyClaim(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      description: description ?? this.description,
+      amount: amount ?? this.amount,
+      status: status ?? this.status,
+      dateIncurred: dateIncurred ?? this.dateIncurred,
+      brandName: brandName ?? this.brandName,
+      productName: productName ?? this.productName,
+      schemeNames: schemeNames ?? this.schemeNames,
+      packsAffected: packsAffected ?? this.packsAffected,
+      companyName: companyName ?? this.companyName,
+    );
+  }
 }
-
-// Dummy Global list for company claims (for demonstration)
-List<CompanyClaim> globalCompanyClaims = [
-  CompanyClaim(
-    id: 'cc001',
-    type: 'Car Maintenance',
-    description: 'Q2 Vehicle Service - Car A',
-    amount: 15000.0,
-    status: 'Pending',
-    dateIncurred: DateTime(2025, 6, 30),
-  ),
-  CompanyClaim(
-    id: 'cc002',
-    type: 'Salesman Salary',
-    description: 'June 2025 - Salesman B Salary',
-    amount: 30000.0,
-    status: 'Paid',
-    dateIncurred: DateTime(2025, 6, 25),
-    clearanceDate: DateTime(2025, 7, 1),
-    clearanceDescription: 'Monthly payroll',
-  ),
-];

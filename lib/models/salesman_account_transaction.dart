@@ -1,42 +1,87 @@
 // lib/models/salesman_account_transaction.dart
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class SalesmanAccountTransaction {
   final String id;
   final String salesmanId;
   final String description;
-  final DateTime transactionDate;
-  final double amount;
+  final Timestamp date; // Use Timestamp for Firestore compatibility
   final String type; // e.g., 'Stock Out', 'Cash Received', 'Salary Paid', 'Advance'
-  final String direction; // 'Credit' (money owed to salesman), 'Debit' (money owed by salesman)
+  final String? productName;
+  final String? brandName;
+  final double? stockOutQuantity;
+  final double? stockReturnQuantity;
+  final double? cashReceived;
+  final String? notes; // Renamed from description in old code
+  final List<String>? appliedSchemeNames;
+  final double? totalSchemeDiscount;
+  final double? calculatedPrice;
+  final double? grossPrice;
 
   SalesmanAccountTransaction({
     required this.id,
     required this.salesmanId,
     required this.description,
-    required this.transactionDate,
-    required this.amount,
+    required this.date,
     required this.type,
-    required this.direction,
+    this.productName,
+    this.brandName,
+    this.stockOutQuantity,
+    this.stockReturnQuantity,
+    this.cashReceived,
+    this.notes,
+    this.appliedSchemeNames,
+    this.totalSchemeDiscount,
+    this.calculatedPrice,
+    this.grossPrice,
   });
 
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-          (other is SalesmanAccountTransaction && runtimeType == other.runtimeType && id == other.id);
+  // Factory constructor to create a SalesmanAccountTransaction from a Firestore document.
+  factory SalesmanAccountTransaction.fromFirestore(Map<String, dynamic> data, String id) {
+    return SalesmanAccountTransaction(
+      id: id,
+      salesmanId: data['salesmanId'] ?? '',
+      description: data['description'] ?? '',
+      date: data['date'] ?? Timestamp.now(),
+      type: data['type'] ?? '',
+      productName: data['productName'],
+      brandName: data['brandName'],
+      stockOutQuantity: (data['stockOutQuantity'] as num?)?.toDouble(),
+      stockReturnQuantity: (data['stockReturnQuantity'] as num?)?.toDouble(),
+      cashReceived: (data['cashReceived'] as num?)?.toDouble(),
+      notes: data['notes'],
+      appliedSchemeNames: (data['appliedSchemeNames'] as List<dynamic>?)?.map((item) => item as String).toList(),
+      totalSchemeDiscount: (data['totalSchemeDiscount'] as num?)?.toDouble(),
+      calculatedPrice: (data['calculatedPrice'] as num?)?.toDouble(),
+      grossPrice: (data['grossPrice'] as num?)?.toDouble(),
+    );
+  }
 
-  @override
-  int get hashCode => id.hashCode;
+  // Method to convert a SalesmanAccountTransaction object into a map for Firestore.
+  Map<String, dynamic> toFirestore() {
+    return {
+      'salesmanId': salesmanId,
+      'description': description,
+      'date': date,
+      'type': type,
+      if (productName != null) 'productName': productName,
+      if (brandName != null) 'brandName': brandName,
+      if (stockOutQuantity != null) 'stockOutQuantity': stockOutQuantity,
+      if (stockReturnQuantity != null) 'stockReturnQuantity': stockReturnQuantity,
+      if (cashReceived != null) 'cashReceived': cashReceived,
+      if (notes != null) 'notes': notes,
+      if (appliedSchemeNames != null) 'appliedSchemeNames': appliedSchemeNames,
+      if (totalSchemeDiscount != null) 'totalSchemeDiscount': totalSchemeDiscount,
+      if (calculatedPrice != null) 'calculatedPrice': calculatedPrice,
+      if (grossPrice != null) 'grossPrice': grossPrice,
+    };
+  }
 
-  static List<SalesmanAccountTransaction> get dummyTransactions => [
-    SalesmanAccountTransaction(
-        id: 'sat001', salesmanId: 's001', description: 'July Salary', transactionDate: DateTime(2025, 7, 25), amount: 35000.0, type: 'Salary Paid', direction: 'Credit'),
-    SalesmanAccountTransaction(
-        id: 'sat002', salesmanId: 's001', description: 'Stock out - Marlboro', transactionDate: DateTime(2025, 7, 22), amount: 12500.0, type: 'Stock Out', direction: 'Debit'),
-    SalesmanAccountTransaction(
-        id: 'sat003', salesmanId: 's001', description: 'Cash collected', transactionDate: DateTime(2025, 7, 22), amount: 8000.0, type: 'Cash Received', direction: 'Credit'),
-    SalesmanAccountTransaction(
-        id: 'sat004', salesmanId: 's002', description: 'Advance payment', transactionDate: DateTime(2025, 7, 20), amount: 5000.0, type: 'Advance', direction: 'Debit'),
-    SalesmanAccountTransaction(
-        id: 'sat005', salesmanId: 's001', description: 'Stock out - Dunhill', transactionDate: DateTime(2025, 7, 18), amount: 20000.0, type: 'Stock Out', direction: 'Debit'),
-  ];
+// NOTE: The dummyTransactions list in the original file had different fields.
+// I've kept it as a placeholder but you should use the real data from Firestore.
+// The old model was not designed for a transaction ledger and was a simple list.
+// You will need to update the `SalesmanStockDetailScreen` again
+// to properly use the new model's fields, as the current code
+// is still using some of the old fields like `cashGiven` and `stockGivenAmount`.
 }

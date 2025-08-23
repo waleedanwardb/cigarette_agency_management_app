@@ -1,31 +1,15 @@
+// lib/UI/screens/payments/payments_main_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-// Import the sub-screens for payments management
-import 'package:cigarette_agency_management_app/UI/screens/payments/distributor_payments_screen.dart'; // This will serve as 'Payments to Company'
-import 'package:cigarette_agency_management_app/UI/screens/payments/salesman_payments_screen.dart'; // This is 'Payments to Salesmen'
+import 'package:cigarette_agency_management_app/UI/screens/payments/distributor_payments_screen.dart';
+import 'package:cigarette_agency_management_app/UI/screens/payments/salesman_payments_screen.dart';
 
-// Import main screen paths for BottomNavigationBar navigation
 import 'package:cigarette_agency_management_app/UI/screens/home_screen/home_screen.dart';
 import 'package:cigarette_agency_management_app/UI/screens/dashboard/dashboard_screen.dart';
 import 'package:cigarette_agency_management_app/UI/screens/stock/stock_main_screen.dart';
-
-
-// Dummy data model for Payment Summary KPI (unchanged)
-class PaymentSummary {
-  final String title;
-  final String value;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-
-  PaymentSummary({
-    required this.title,
-    required this.value,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-  });
-}
+import 'package:cigarette_agency_management_app/services/payment_service.dart';
+import 'package:cigarette_agency_management_app/models/payment.dart';
 
 class PaymentsMainScreen extends StatefulWidget {
   const PaymentsMainScreen({super.key});
@@ -35,55 +19,33 @@ class PaymentsMainScreen extends StatefulWidget {
 }
 
 class _PaymentsMainScreenState extends State<PaymentsMainScreen> {
-  int _selectedIndex = 3; // Assuming Finance is the 4th item (index 3) in bottom nav
-
-  final List<PaymentSummary> _paymentSummaries = [
-    PaymentSummary(
-      title: 'Total Payments Made This Month',
-      value: 'PKR 1,500,000',
-      subtitle: 'Includes all outgoing payments',
-      icon: Icons.payments,
-      color: Colors.blueAccent,
-    ),
-    PaymentSummary(
-      title: 'Outstanding Company Payments', // Updated label
-      value: 'PKR 250,000',
-      subtitle: 'Pending payments to companies for stock',
-      icon: Icons.warning,
-      color: Colors.orange,
-    ),
-  ];
-
-  // List of main screens for BottomNavigationBar navigation
-  final List<Widget> _bottomNavScreens = const [
-    HomeScreen(), // Index 0
-    DashboardScreen(), // Index 1
-    StockMainScreen(), // Index 2
-    PaymentsMainScreen(), // Index 3
-  ];
+  int _selectedIndex = 3;
 
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
     });
-    // This ensures bottom nav selection also navigates
-    if (index != _selectedIndex) { // Only navigate if different tab is selected
+    if (index != _selectedIndex) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => _bottomNavScreens[index]),
+        MaterialPageRoute(
+            builder: (context) => [
+              const HomeScreen(),
+              const DashboardScreen(),
+              const StockMainScreen(),
+              const PaymentsMainScreen()
+            ][index]),
       );
     }
   }
 
-  // Navigation to the screen managing payments TO COMPANY (Distributor Invoices)
   void _navigateToCompanyPayments() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const DistributorPaymentsScreen()), // Renamed conceptually
+      MaterialPageRoute(builder: (context) => const DistributorPaymentsScreen()),
     );
   }
 
-  // Navigation to the screen managing payments TO SALESMEN (Salary/Advances)
   void _navigateToSalesmanPayments() {
     Navigator.push(
       context,
@@ -93,6 +55,8 @@ class _PaymentsMainScreenState extends State<PaymentsMainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final paymentService = Provider.of<PaymentService>(context);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -100,7 +64,7 @@ class _PaymentsMainScreenState extends State<PaymentsMainScreen> {
           style: TextStyle(fontSize: 18),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back), // Or menu icon if directly from login
+          icon: const Icon(Icons.arrow_back),
           onPressed: () {
             Navigator.of(context).pop();
           },
@@ -118,21 +82,30 @@ class _PaymentsMainScreenState extends State<PaymentsMainScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Payment Summary',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 15),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _paymentSummaries.length,
-              itemBuilder: (context, index) {
-                final summary = _paymentSummaries[index];
-                return Card(
+        child: StreamBuilder<List<Payment>>(
+          stream: paymentService.getPayments(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Center(child: Text('Error: ${snapshot.error}'));
+            }
+
+            final payments = snapshot.data ?? [];
+            final double totalPaymentsMade = payments
+                .where((p) => p.type == 'Company Payment' || p.type == 'Salesman Payment')
+                .fold(0.0, (sum, item) => sum + item.amount);
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Payment Summary',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 15),
+                Card(
                   margin: const EdgeInsets.only(bottom: 15),
                   elevation: 2,
                   shape: RoundedRectangleBorder(
@@ -142,25 +115,25 @@ class _PaymentsMainScreenState extends State<PaymentsMainScreen> {
                     padding: const EdgeInsets.all(16.0),
                     child: Row(
                       children: [
-                        Icon(summary.icon, size: 30, color: summary.color),
+                        Icon(Icons.payments, size: 30, color: Colors.blueAccent),
                         const SizedBox(width: 15),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                summary.title,
+                                'Total Payments Made This Month',
                                 style: TextStyle(fontSize: 14, color: Colors.grey[700]),
                               ),
                               Text(
-                                summary.value,
+                                'PKR ${totalPaymentsMade.toStringAsFixed(2)}',
                                 style: const TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                               Text(
-                                summary.subtitle,
+                                'Includes all outgoing payments',
                                 style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                               ),
                             ],
@@ -169,72 +142,59 @@ class _PaymentsMainScreenState extends State<PaymentsMainScreen> {
                       ],
                     ),
                   ),
-                );
-              },
-            ),
-            const SizedBox(height: 30),
-
-            const Text(
-              'Payment Options',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 15),
-            Column(
-              children: [
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _navigateToCompanyPayments, // Navigate to Company Payments
-                    icon: const Icon(Icons.business_center), // Changed icon
-                    label: const Text('Payments to Company'), // Updated label
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      backgroundColor: Colors.red[700],
-                      foregroundColor: Colors.white,
-                      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ),
+                ),
+                const SizedBox(height: 30),
+                const Text(
+                  'Payment Options',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 15),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _navigateToSalesmanPayments, // Navigate to Salesman Payments
-                    icon: const Icon(Icons.person_outline),
-                    label: const Text('Payments to Salesmen'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      backgroundColor: Colors.red[700],
-                      foregroundColor: Colors.white,
-                      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _navigateToCompanyPayments,
+                        icon: const Icon(Icons.business_center),
+                        label: const Text('Payments to Company'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          backgroundColor: Colors.red[700],
+                          foregroundColor: Colors.white,
+                          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 15),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _navigateToSalesmanPayments,
+                        icon: const Icon(Icons.person_outline),
+                        label: const Text('Payments to Salesmen'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          backgroundColor: Colors.red[700],
+                          foregroundColor: Colors.white,
+                          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ],
+            );
+          },
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.storage),
-            label: 'Stock',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet),
-            label: 'Finance',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
+          BottomNavigationBarItem(icon: Icon(Icons.storage), label: 'Stock'),
+          BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: 'Finance'),
         ],
         currentIndex: _selectedIndex,
         selectedItemColor: Colors.blue,

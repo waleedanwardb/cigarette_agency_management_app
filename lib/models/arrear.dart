@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart'; // For TextDecoration if status changes
+// lib/models/arrear.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 
 class Arrear {
   final String id;
@@ -6,10 +8,10 @@ class Arrear {
   final String salesmanName;
   final DateTime dateIncurred;
   final double amount;
-  final String description; // Reason for arrear
-  String status; // 'Outstanding', 'Cleared'
-  DateTime? clearanceDate;
-  String? clearanceDescription;
+  final String description;
+  final String status; // e.g., 'Outstanding', 'Cleared'
+  final DateTime? clearanceDate;
+  final String? clearanceDescription;
 
   Arrear({
     required this.id,
@@ -17,75 +19,60 @@ class Arrear {
     required this.salesmanName,
     required this.dateIncurred,
     required this.amount,
-    this.description = '',
+    required this.description,
     this.status = 'Outstanding',
     this.clearanceDate,
     this.clearanceDescription,
   });
 
-  // Helper to create a copy with updated values
+  factory Arrear.fromFirestore(Map<String, dynamic> data, String id) {
+    return Arrear(
+      id: id,
+      salesmanId: data['salesmanId'] ?? '',
+      salesmanName: data['salesmanName'] ?? '',
+      dateIncurred: (data['dateIncurred'] as Timestamp).toDate(),
+      amount: (data['amount'] as num?)?.toDouble() ?? 0.0,
+      description: data['description'] ?? '',
+      status: data['status'] ?? 'Outstanding',
+      clearanceDate: (data['clearanceDate'] as Timestamp?)?.toDate(),
+      clearanceDescription: data['clearanceDescription'],
+    );
+  }
+
+  Map<String, dynamic> toFirestore() {
+    return {
+      'salesmanId': salesmanId,
+      'salesmanName': salesmanName,
+      'dateIncurred': Timestamp.fromDate(dateIncurred),
+      'amount': amount,
+      'description': description,
+      'status': status,
+      if (clearanceDate != null) 'clearanceDate': Timestamp.fromDate(clearanceDate!),
+      if (clearanceDescription != null) 'clearanceDescription': clearanceDescription,
+    };
+  }
+
   Arrear copyWith({
+    String? id,
+    String? salesmanId,
+    String? salesmanName,
+    DateTime? dateIncurred,
+    double? amount,
+    String? description,
     String? status,
     DateTime? clearanceDate,
     String? clearanceDescription,
   }) {
     return Arrear(
-      id: id,
-      salesmanId: salesmanId,
-      salesmanName: salesmanName,
-      dateIncurred: dateIncurred,
-      amount: amount,
-      description: description,
+      id: id ?? this.id,
+      salesmanId: salesmanId ?? this.salesmanId,
+      salesmanName: salesmanName ?? this.salesmanName,
+      dateIncurred: dateIncurred ?? this.dateIncurred,
+      amount: amount ?? this.amount,
+      description: description ?? this.description,
       status: status ?? this.status,
       clearanceDate: clearanceDate ?? this.clearanceDate,
       clearanceDescription: clearanceDescription ?? this.clearanceDescription,
     );
   }
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-          (other is Arrear && runtimeType == other.runtimeType && id == other.id);
-
-  @override
-  int get hashCode => id.hashCode;
-
-  // Dummy arrears for demonstration
-  static List<Arrear> get dummyArrears => [
-    Arrear(
-      id: 'arr001',
-      salesmanId: 's001',
-      salesmanName: 'Ahmed Khan',
-      dateIncurred: DateTime(2025, 7, 20),
-      amount: 2500.0,
-      description: 'Cash left from morning sales',
-    ),
-    Arrear(
-      id: 'arr002',
-      salesmanId: 's002',
-      salesmanName: 'Sara Ali',
-      dateIncurred: DateTime(2025, 7, 18),
-      amount: 1000.0,
-      description: 'Pending collection from shop X',
-      status: 'Cleared',
-      clearanceDate: DateTime(2025, 7, 19),
-      clearanceDescription: 'Collected next day',
-    ),
-    Arrear(
-      id: 'arr003',
-      salesmanId: 's001',
-      salesmanName: 'Ahmed Khan',
-      dateIncurred: DateTime(2025, 7, 15),
-      amount: 3000.0,
-      description: 'Collection from large order',
-    ),
-    Arrear(
-      id: 'arr004',
-      salesmanId: 's003',
-      salesmanName: 'Usman Tariq',
-      dateIncurred: DateTime(2025, 7, 22),
-      amount: 1500.0,
-      description: 'Cash for afternoon deliveries',
-    ),
-  ];
 }

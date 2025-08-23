@@ -1,17 +1,14 @@
 // lib/UI/screens/salesman/salesman_stock_list_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
-// Import necessary files
-import 'package:cigarette_agency_management_app/models/salesman.dart'; // Your Salesman model
-import 'package:cigarette_agency_management_app/UI/screens/salesman/salesman_stock_detail_screen.dart'; // Detail screen
-import 'package:cigarette_agency_management_app/UI/screens/salesman/add_salesman_screen.dart'; // Add/Edit screen
-import 'package:cigarette_agency_management_app/UI/screens/salesman/salesman_accounts_screen.dart'; // NEW: Import SalesmanAccountsScreen
-import 'package:cigarette_agency_management_app/services/salesman_service.dart'; // Import the service
+import 'package:cigarette_agency_management_app/models/salesman.dart';
+import 'package:cigarette_agency_management_app/UI/screens/salesman/add_salesman_screen.dart';
+import 'package:cigarette_agency_management_app/UI/screens/salesman/salesman_stock_detail_screen.dart'; // Correct import
+import 'package:cigarette_agency_management_app/services/salesman_service.dart';
 
-// Import main screens for BottomNavigationBar navigation
 import 'package:cigarette_agency_management_app/UI/screens/home_screen/home_screen.dart';
 import 'package:cigarette_agency_management_app/UI/screens/dashboard/dashboard_screen.dart';
 import 'package:cigarette_agency_management_app/UI/screens/stock/stock_main_screen.dart';
@@ -26,9 +23,7 @@ class SalesmanStockListScreen extends StatefulWidget {
 }
 
 class _SalesmanStockListScreenState extends State<SalesmanStockListScreen> {
-  int _selectedIndex = 2;
-
-  // No need for a local dummy list anymore. Data will come from Firestore via a Stream.
+  int _selectedIndex = 2; // Stock screen index
 
   void _onItemTapped(int index) {
     setState(() {
@@ -36,23 +31,16 @@ class _SalesmanStockListScreenState extends State<SalesmanStockListScreen> {
     });
   }
 
-  // Navigation to Add/Edit Salesman Screen
   void _navigateToAddEditSalesmanScreen({Salesman? salesman}) async {
-    final result = await Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => AddSalesmanScreen(salesman: salesman), // Pass salesman for editing
+        builder: (context) => AddSalesmanScreen(salesman: salesman),
       ),
     );
-
-    // This part of the logic will now be handled by the services updating Firestore.
-    // The StreamBuilder will automatically rebuild the UI.
-    // So, we don't need to manually update a local list.
   }
 
-  // Helper for Salesman Options (Edit/Freeze/Delete)
   void _showSalesmanOptions(BuildContext context, Salesman salesman) {
-    // Get the service instance from the context
     final salesmanService = Provider.of<SalesmanService>(context, listen: false);
 
     showModalBottomSheet(
@@ -65,8 +53,8 @@ class _SalesmanStockListScreenState extends State<SalesmanStockListScreen> {
                 leading: const Icon(Icons.edit),
                 title: const Text('Edit Profile'),
                 onTap: () {
-                  Navigator.pop(bc); // Close bottom sheet
-                  _navigateToAddEditSalesmanScreen(salesman: salesman); // Navigate to edit
+                  Navigator.pop(bc);
+                  _navigateToAddEditSalesmanScreen(salesman: salesman);
                 },
               ),
               ListTile(
@@ -74,7 +62,6 @@ class _SalesmanStockListScreenState extends State<SalesmanStockListScreen> {
                 title: Text(salesman.isFrozen ? 'Unfreeze Salesman' : 'Freeze Salesman'),
                 onTap: () async {
                   Navigator.pop(bc);
-                  // Call the service to update the salesman's frozen status in Firestore
                   final updatedSalesman = salesman.copyWith(isFrozen: !salesman.isFrozen);
                   await salesmanService.updateSalesman(updatedSalesman);
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -97,7 +84,6 @@ class _SalesmanStockListScreenState extends State<SalesmanStockListScreen> {
     );
   }
 
-  // Confirm Delete Dialog
   void _confirmDeleteSalesman(Salesman salesman, SalesmanService salesmanService) {
     showDialog(
       context: context,
@@ -112,8 +98,7 @@ class _SalesmanStockListScreenState extends State<SalesmanStockListScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                Navigator.of(dialogContext).pop(); // Close confirmation dialog
-                // Call the service to delete the salesman from Firestore
+                Navigator.of(dialogContext).pop();
                 await salesmanService.deleteSalesman(salesman.id);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('${salesman.name} deleted successfully!')),
@@ -128,16 +113,14 @@ class _SalesmanStockListScreenState extends State<SalesmanStockListScreen> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
-    // Get the service instance from the context
     final salesmanService = Provider.of<SalesmanService>(context);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Salesman Management', // Updated title
+          'Salesman Management',
           style: TextStyle(fontSize: 18),
         ),
         leading: IconButton(
@@ -167,7 +150,6 @@ class _SalesmanStockListScreenState extends State<SalesmanStockListScreen> {
               ),
             ),
           ),
-          // --- Use StreamBuilder to listen to Firestore changes ---
           Expanded(
             child: StreamBuilder<List<Salesman>>(
               stream: salesmanService.getSalesmen(),
@@ -203,11 +185,11 @@ class _SalesmanStockListScreenState extends State<SalesmanStockListScreen> {
                       ),
                       child: InkWell(
                         onTap: () {
-                          // FIX: Navigate to the new SalesmanAccountsScreen
+                          // Correctly navigate to the SalesmanStockDetailScreen
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => SalesmanAccountsScreen(salesman: salesman),
+                              builder: (context) => SalesmanStockDetailScreen(salesman: salesman),
                             ),
                           );
                         },
@@ -218,7 +200,7 @@ class _SalesmanStockListScreenState extends State<SalesmanStockListScreen> {
                             children: [
                               CircleAvatar(
                                 radius: 25,
-                                backgroundImage: NetworkImage(salesman.imageUrl),
+                                backgroundImage: salesman.imageUrl.isNotEmpty ? NetworkImage(salesman.imageUrl) : null,
                                 backgroundColor: Colors.grey[200],
                                 child: salesman.imageUrl.isEmpty
                                     ? Icon(Icons.person, size: 30, color: Colors.grey[600])

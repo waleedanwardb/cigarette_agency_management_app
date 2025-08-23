@@ -1,16 +1,16 @@
+// lib/UI/screens/home_screen/home_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:cigarette_agency_management_app/UI/screens/dashboard/dashboard_screen.dart';
 import 'package:cigarette_agency_management_app/UI/screens/salesman/salesman_stock_list_screen.dart';
-import 'package:cigarette_agency_management_app/UI/screens/scheme_management/scheme_management_screen.dart';
 import 'package:cigarette_agency_management_app/UI/screens/payments/payments_main_screen.dart';
 import 'package:cigarette_agency_management_app/UI/widgets/app_drawer.dart';
 import 'package:cigarette_agency_management_app/UI/screens/products/brand_products_list_screen.dart';
+import 'package:cigarette_agency_management_app/UI/screens/stock/stock_main_screen.dart';
+import 'package:cigarette_agency_management_app/UI/screens/scheme_management/scheme_management_screen.dart';
 
 import 'package:cigarette_agency_management_app/models/brand.dart';
 import 'package:cigarette_agency_management_app/models/product.dart';
@@ -35,7 +35,10 @@ class _HomeScreenState extends State<HomeScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => [
-          const HomeScreen(), const DashboardScreen(), const SalesmanStockListScreen(), const PaymentsMainScreen()
+          const HomeScreen(),
+          const DashboardScreen(),
+          const StockMainScreen(),
+          const PaymentsMainScreen()
         ][index]),
       );
     }
@@ -53,7 +56,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 title: const Text('Edit Brand'),
                 onTap: () {
                   Navigator.pop(bc);
-                  // Implement edit brand functionality
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Edit ${brand.name} functionality!')),
                   );
@@ -162,10 +164,236 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _showAddBrandDialog() async {
+    final _formKey = GlobalKey<FormState>();
+    final _nameController = TextEditingController();
+    File? _pickedImage;
+    bool _isLoading = false;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateInDialog) {
+            return AlertDialog(
+              title: const Text('Add New Brand'),
+              content: SingleChildScrollView(
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: _nameController,
+                        decoration: const InputDecoration(labelText: 'Brand Name'),
+                        validator: (value) => value!.isEmpty ? 'Please enter a name' : null,
+                      ),
+                      const SizedBox(height: 10),
+                      if (_pickedImage != null)
+                        Image.file(_pickedImage!, height: 100, width: 100, fit: BoxFit.contain)
+                      else
+                        ElevatedButton.icon(
+                          onPressed: _isLoading ? null : () async {
+                            final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
+                            if (pickedFile != null) {
+                              setStateInDialog(() {
+                                _pickedImage = File(pickedFile.path);
+                              });
+                            }
+                          },
+                          icon: const Icon(Icons.image),
+                          label: const Text('Pick Image'),
+                        ),
+                      const SizedBox(height: 10),
+                      if (_isLoading) const CircularProgressIndicator(),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: _isLoading ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: _isLoading
+                      ? null
+                      : () async {
+                    if (_formKey.currentState!.validate()) {
+                      setStateInDialog(() {
+                        _isLoading = true;
+                      });
+
+                      final brandService = Provider.of<BrandService>(context, listen: false);
+                      final newBrand = Brand(
+                        id: '',
+                        name: _nameController.text.trim(),
+                        icon: '📦',
+                        isFrozen: false,
+                        imageUrl: '',
+                      );
+                      await brandService.addBrand(newBrand, brandLogo: _pickedImage);
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Brand added successfully!')),
+                      );
+
+                      Navigator.of(context).pop();
+                    }
+                  },
+                  child: const Text('Save Brand'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _showAddProductDialog() async {
-    // ... (rest of your _showAddProductDialog code)
-    // The controllers and dialog logic will remain mostly the same, but the 'Save Product'
-    // button will call productService.addProduct() and pass the relevant data.
+    final _formKey = GlobalKey<FormState>();
+    final _nameController = TextEditingController();
+    final _priceController = TextEditingController();
+    final _stockController = TextEditingController();
+    Brand? _selectedBrand;
+    File? _pickedImage;
+    bool _isLoading = false;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateInDialog) {
+            return AlertDialog(
+              title: const Text('Add New Product'),
+              content: SingleChildScrollView(
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: _nameController,
+                        decoration: const InputDecoration(labelText: 'Product Name'),
+                        validator: (value) => value!.isEmpty ? 'Please enter a name' : null,
+                      ),
+                      TextFormField(
+                        controller: _priceController,
+                        decoration: const InputDecoration(labelText: 'Price'),
+                        keyboardType: TextInputType.number,
+                        validator: (value) => double.tryParse(value!) == null ? 'Please enter a valid price' : null,
+                      ),
+                      TextFormField(
+                        controller: _stockController,
+                        decoration: const InputDecoration(labelText: 'Stock Quantity'),
+                        keyboardType: TextInputType.number,
+                        validator: (value) => int.tryParse(value!) == null ? 'Please enter a valid quantity' : null,
+                      ),
+                      StreamBuilder<List<Brand>>(
+                        stream: Provider.of<BrandService>(context, listen: false).getBrands(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const CircularProgressIndicator();
+                          }
+                          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                            return const Text('No brands available.');
+                          }
+
+                          final brands = snapshot.data!;
+                          // Fix for the crash: find the actual instance from the fetched list
+                          if (_selectedBrand != null) {
+                            try {
+                              _selectedBrand = brands.firstWhere((brand) => brand.id == _selectedBrand!.id);
+                            } catch (e) {
+                              // If the previously selected brand is no longer in the list, reset it
+                              _selectedBrand = null;
+                            }
+                          }
+
+                          return DropdownButtonFormField<Brand>(
+                            decoration: const InputDecoration(labelText: 'Brand'),
+                            value: _selectedBrand,
+                            items: brands.map((brand) {
+                              return DropdownMenuItem<Brand>(
+                                value: brand,
+                                child: Text(brand.name),
+                              );
+                            }).toList(),
+                            onChanged: (Brand? newValue) {
+                              setStateInDialog(() {
+                                _selectedBrand = newValue;
+                              });
+                            },
+                            validator: (value) => value == null ? 'Please select a brand' : null,
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      if (_pickedImage != null)
+                        Image.file(_pickedImage!, height: 100, width: 100, fit: BoxFit.contain)
+                      else
+                        ElevatedButton.icon(
+                          onPressed: _isLoading ? null : () async {
+                            final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
+                            if (pickedFile != null) {
+                              setStateInDialog(() {
+                                _pickedImage = File(pickedFile.path);
+                              });
+                            }
+                          },
+                          icon: const Icon(Icons.image),
+                          label: const Text('Pick Image'),
+                        ),
+                      const SizedBox(height: 10),
+                      if (_isLoading) const CircularProgressIndicator(),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: _isLoading ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: _isLoading
+                      ? null
+                      : () async {
+                    if (_formKey.currentState!.validate() && _selectedBrand != null) {
+                      setStateInDialog(() {
+                        _isLoading = true;
+                      });
+
+                      final productService = Provider.of<ProductService>(context, listen: false);
+                      final newProduct = Product(
+                        id: '',
+                        name: _nameController.text.trim(),
+                        brand: _selectedBrand!.name,
+                        brandId: _selectedBrand!.id,
+                        price: double.parse(_priceController.text.trim()),
+                        inStock: int.parse(_stockController.text.trim()) > 0,
+                        stockQuantity: int.parse(_stockController.text.trim()),
+                        isFrozen: false,
+                        imageUrl: '',
+                      );
+                      await productService.addProduct(newProduct, _pickedImage);
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Product added successfully!')),
+                      );
+
+                      Navigator.of(context).pop();
+                    }
+                  },
+                  child: const Text('Save Product'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -221,7 +449,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       final brand = brands[index];
                       return GestureDetector(
                         onTap: () {
-                          // Navigate to Brand's Product List Screen
                           Navigator.push(context, MaterialPageRoute(builder: (context) => BrandProductsListScreen(brand: brand)));
                         },
                         onLongPress: () => _showBrandOptions(context, brand, brandService),
@@ -234,7 +461,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text(brand.icon, style: const TextStyle(fontSize: 40)),
+                                    if (brand.imageUrl.isNotEmpty)
+                                      Image.network(brand.imageUrl, height: 60, width: 60, fit: BoxFit.contain)
+                                    else
+                                      const Icon(Icons.image_not_supported, size: 60, color: Colors.grey),
                                     const SizedBox(height: 8),
                                     Text(brand.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
                                   ],
@@ -328,9 +558,37 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddProductDialog,
+        onPressed: () {
+          showModalBottomSheet(
+            context: context,
+            builder: (BuildContext bc) {
+              return SafeArea(
+                child: Wrap(
+                  children: <Widget>[
+                    ListTile(
+                      leading: const Icon(Icons.group),
+                      title: const Text('Add Brand'),
+                      onTap: () {
+                        Navigator.pop(bc);
+                        _showAddBrandDialog();
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.add_shopping_cart),
+                      title: const Text('Add Product'),
+                      onTap: () {
+                        Navigator.pop(bc);
+                        _showAddProductDialog();
+                      },
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
         icon: const Icon(Icons.add),
-        label: const Text('Add Product'),
+        label: const Text('Add Item'),
       ),
     );
   }

@@ -1,6 +1,10 @@
+// lib/UI/screens/company_claims/company_claims_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'package:cigarette_agency_management_app/models/company_claim.dart'; // Import CompanyClaim model and globalClaims list
+
+import 'package:cigarette_agency_management_app/models/company_claim.dart';
+import 'package:cigarette_agency_management_app/services/company_claim_service.dart';
 
 class CompanyClaimsScreen extends StatefulWidget {
   const CompanyClaimsScreen({super.key});
@@ -10,27 +14,11 @@ class CompanyClaimsScreen extends StatefulWidget {
 }
 
 class _CompanyClaimsScreenState extends State<CompanyClaimsScreen> {
-  int _selectedIndex = 3; // Assuming Finance is the 4th item (index 3) in bottom nav
+  String? _filterStatus;
+  DateTime? _filterStartDate;
+  DateTime? _filterEndDate;
 
-  // Using the globalCompanyClaims list directly
-  List<CompanyClaim> _claims = globalCompanyClaims;
-
-  @override
-  void initState() {
-    super.initState();
-    // Sort claims by date (most recent first) or status for consistent display
-    _claims.sort((a, b) => b.dateIncurred.compareTo(a.dateIncurred));
-  }
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-    // Implement navigation for bottom nav if this screen is directly on it
-  }
-
-  // --- Helper to show options for a Company Claim ---
-  void _showClaimOptions(BuildContext context, CompanyClaim claim) {
+  void _showClaimOptions(BuildContext context, CompanyClaim claim, CompanyClaimService claimService) {
     showModalBottomSheet(
       context: context,
       builder: (BuildContext bc) {
@@ -38,33 +26,21 @@ class _CompanyClaimsScreenState extends State<CompanyClaimsScreen> {
           child: Wrap(
             children: <Widget>[
               ListTile(
-                leading: const Icon(Icons.edit),
-                title: const Text('Edit Claim'),
-                onTap: () {
-                  Navigator.pop(bc); // Close bottom sheet
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Edit Claim "${claim.description}" functionality!')),
-                  );
-                  // Implement edit claim functionality (e.g., show a pre-filled form)
+                leading: const Icon(Icons.check_circle, color: Colors.green),
+                title: const Text('Mark as Claimed'),
+                onTap: () async {
+                  Navigator.pop(bc);
+                  await _markClaimAsPaid(claim, claimService);
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete),
+                leading: const Icon(Icons.delete, color: Colors.red),
                 title: const Text('Delete Claim'),
                 onTap: () {
-                  Navigator.pop(bc); // Close bottom sheet
-                  _confirmDeleteClaim(claim); // Confirm before deleting
+                  Navigator.pop(bc);
+                  _confirmDeleteClaim(claim, claimService);
                 },
               ),
-              if (claim.status != 'Paid') // Only show "Clear Claim" if not already paid
-                ListTile(
-                  leading: const Icon(Icons.check_circle_outline),
-                  title: const Text('Clear Claim (Mark as Paid)'),
-                  onTap: () {
-                    Navigator.pop(bc); // Close bottom sheet
-                    _showClearClaimDialog(claim); // Show dialog to clear claim
-                  },
-                ),
             ],
           ),
         );
@@ -72,29 +48,35 @@ class _CompanyClaimsScreenState extends State<CompanyClaimsScreen> {
     );
   }
 
-  // --- Confirm Delete Claim Dialog ---
-  void _confirmDeleteClaim(CompanyClaim claim) {
+  Future<void> _markClaimAsPaid(CompanyClaim claim, CompanyClaimService claimService) async {
+    final updatedClaim = claim.copyWith(status: 'Claimed');
+    try {
+      await claimService.updateCompanyClaim(updatedClaim);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Claim for ${claim.companyName} marked as claimed.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update claim: $e')),
+      );
+    }
+  }
+
+  void _confirmDeleteClaim(CompanyClaim claim, CompanyClaimService claimService) {
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('Confirm Delete'),
-          content: Text('Are you sure you want to delete this claim?\n"${claim.description}"'),
+          content: Text('Are you sure you want to delete this claim (PKR ${claim.amount.toStringAsFixed(2)})?'),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
-            ),
+            TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
             ElevatedButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(); // Close confirmation dialog
-                setState(() {
-                  _claims.removeWhere((c) => c.id == claim.id);
-                  // Also remove from global list to keep state consistent
-                  globalCompanyClaims.removeWhere((c) => c.id == claim.id);
-                });
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                await claimService.deleteCompanyClaim(claim.id);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Claim deleted successfully!')),
+                  const SnackBar(content: Text('Claim deleted successfully!')),
                 );
               },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -106,303 +88,148 @@ class _CompanyClaimsScreenState extends State<CompanyClaimsScreen> {
     );
   }
 
-  // --- Clear Claim Dialog (Mark as Paid) ---
-  Future<void> _showClearClaimDialog(CompanyClaim claim) async {
-    final _formKey = GlobalKey<FormState>();
-    final TextEditingController descriptionController = TextEditingController(text: claim.clearanceDescription);
-    DateTime? clearanceDate = claim.clearanceDate ?? DateTime.now();
-
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setStateInDialog) {
-            return AlertDialog(
-              title: const Text('Clear Claim'),
-              content: SingleChildScrollView(
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('Mark this claim as Paid:'),
-                      const SizedBox(height: 15),
-                      TextFormField(
-                        controller: descriptionController,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          labelText: 'Clearance Description (Optional)',
-                          hintText: 'e.g., Cleared by audit on...',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 15),
-                      TextFormField(
-                        readOnly: true,
-                        controller: TextEditingController(text: DateFormat('yyyy-MM-dd').format(clearanceDate!)),
-                        decoration: const InputDecoration(
-                          labelText: 'Clearance Date',
-                          border: OutlineInputBorder(),
-                          suffixIcon: Icon(Icons.calendar_today),
-                        ),
-                        onTap: () async {
-                          DateTime? picked = await showDatePicker(
-                            context: context,
-                            initialDate: clearanceDate,
-                            firstDate: DateTime(2000),
-                            lastDate: DateTime(2101),
-                          );
-                          if (picked != null) {
-                            setStateInDialog(() {
-                              clearanceDate = picked;
-                            });
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: <Widget>[
-                TextButton(
-                  child: const Text('Cancel'),
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop();
-                  },
-                ),
-                ElevatedButton(
-                  child: const Text('Mark as Paid'),
-                  onPressed: () {
-                    if (_formKey.currentState!.validate()) {
-                      Navigator.of(dialogContext).pop(); // Close dialog
-                      setState(() { // Update the main screen's state
-                        final index = _claims.indexWhere((c) => c.id == claim.id);
-                        if (index != -1) {
-                          // Use copyWith to create a new instance with updated status
-                          _claims[index] = claim.copyWith(
-                            status: 'Paid',
-                            clearanceDate: clearanceDate,
-                            clearanceDescription: descriptionController.text.isEmpty ? null : descriptionController.text,
-                          );
-                        }
-                        // Ensure the global list is also updated
-                        final globalIndex = globalCompanyClaims.indexWhere((c) => c.id == claim.id);
-                        if(globalIndex != -1){
-                          globalCompanyClaims[globalIndex].markAsCleared(date: clearanceDate!, description: descriptionController.text);
-                        }
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Claim "${claim.description}" marked as Paid!')),
-                      );
-                    }
-                  },
-                ),
-              ],
-            );
-          },
-        );
-      },
-    ).then((_) {
-      descriptionController.dispose();
-    });
-  }
-
-
   @override
   Widget build(BuildContext context) {
+    final companyClaimService = Provider.of<CompanyClaimService>(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Company Claims',
-          style: TextStyle(fontSize: 18),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person),
-            onPressed: () {
-              // Navigate to profile
-            },
-          ),
-        ],
-        centerTitle: true,
+        title: const Text('Company Claims'),
         elevation: 0,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: _claims.isEmpty
-            ? Center(
-          child: Text(
-            'No company claims to display.',
-            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-          ),
-        )
-            : ListView.builder(
-          itemCount: _claims.length,
-          itemBuilder: (context, index) {
-            final claim = _claims[index];
-            bool isPaid = claim.status == 'Paid';
-            Color statusColor;
-            if (isPaid) {
-              statusColor = Colors.blue;
-            } else {
-              statusColor = Colors.orange;
-            }
+      body: StreamBuilder<List<CompanyClaim>>(
+        stream: companyClaimService.getCompanyClaims(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
 
-            return Card(
-              margin: const EdgeInsets.only(bottom: 15),
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          final allClaims = snapshot.data ?? [];
+          final filteredClaims = allClaims.where((claim) {
+            final date = claim.dateIncurred;
+            bool matchesDate = (_filterStartDate == null || date.isAfter(_filterStartDate!)) &&
+                (_filterEndDate == null || date.isBefore(_filterEndDate!));
+            bool matchesStatus = _filterStatus == null || claim.status == _filterStatus;
+            return matchesDate && matchesStatus;
+          }).toList();
+
+          double totalOutstandingClaims = filteredClaims
+              .where((c) => c.status == 'Pending')
+              .fold(0.0, (sum, c) => sum + c.amount);
+
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Card(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  elevation: 4,
+                  color: Colors.blue.withOpacity(0.1),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Total Pending Claims:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
+                        Text(
+                          'PKR ${totalOutstandingClaims.toStringAsFixed(2)}',
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Text('Filter Claims', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(labelText: 'Filter by Status', border: OutlineInputBorder()),
+                  value: _filterStatus,
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('All Statuses')),
+                    DropdownMenuItem(value: 'Pending', child: Text('Pending')),
+                    DropdownMenuItem(value: 'Claimed', child: Text('Claimed')),
+                  ],
+                  onChanged: (value) { setState(() { _filterStatus = value; }); },
+                ),
+                const SizedBox(height: 10),
+                Row(
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            claim.type,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              decoration: isPaid ? TextDecoration.lineThrough : null, // Strikethrough
-                            ),
-                          ),
-                        ),
-                        Text(
-                          'PKR ${claim.amount.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                            decoration: isPaid ? TextDecoration.lineThrough : null, // Strikethrough
-                          ),
-                        ),
-                        IconButton( // Kebab menu for options
-                          icon: const Icon(Icons.more_vert),
-                          onPressed: () => _showClaimOptions(context, claim),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      claim.description, // Full detailed description
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[700],
-                        decoration: isPaid ? TextDecoration.lineThrough : null, // Strikethrough
+                    Expanded(
+                      child: TextFormField(
+                        readOnly: true,
+                        controller: TextEditingController(text: _filterStartDate == null ? '' : DateFormat('yyyy-MM-dd').format(_filterStartDate!)),
+                        decoration: const InputDecoration(labelText: 'From Date', border: OutlineInputBorder(), suffixIcon: Icon(Icons.calendar_today)),
+                        onTap: () async {
+                          DateTime? picked = await showDatePicker(context: context, initialDate: _filterStartDate ?? DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2101));
+                          if (picked != null) { setState(() { _filterStartDate = picked; }); }
+                        },
                       ),
                     ),
-                    if (claim.brandName != null || claim.productName != null || claim.companyName != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (claim.companyName != null)
-                              Text('Company: ${claim.companyName}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                            if (claim.brandName != null)
-                              Text('Brand: ${claim.brandName}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                            if (claim.productName != null)
-                              Text('Product: ${claim.productName}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                            if (claim.schemeNames != null && claim.schemeNames!.isNotEmpty)
-                              Text('Schemes: ${claim.schemeNames!.join(', ')}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                            if (claim.packsAffected != null)
-                              Text('Packs: ${claim.packsAffected!.toStringAsFixed(0)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                          ],
-                        ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        readOnly: true,
+                        controller: TextEditingController(text: _filterEndDate == null ? '' : DateFormat('yyyy-MM-dd').format(_filterEndDate!)),
+                        decoration: const InputDecoration(labelText: 'To Date', border: OutlineInputBorder(), suffixIcon: Icon(Icons.calendar_today)),
+                        onTap: () async {
+                          DateTime? picked = await showDatePicker(context: context, initialDate: _filterEndDate ?? DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2101));
+                          if (picked != null) { setState(() { _filterEndDate = picked; }); }
+                        },
                       ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(isPaid ? Icons.check_circle : Icons.hourglass_empty, size: 18, color: statusColor),
-                            const SizedBox(width: 8),
-                            Text(
-                              claim.status,
-                              style: TextStyle(fontSize: 14, color: statusColor),
-                            ),
-                          ],
-                        ),
-                        Text(
-                          'Incurred: ${DateFormat('yyyy-MM-dd').format(claim.dateIncurred)}',
-                          style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                        ),
-                      ],
                     ),
-                    if (isPaid && claim.clearanceDate != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Cleared on: ${DateFormat('yyyy-MM-dd').format(claim.clearanceDate!)}',
-                              style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.black87),
-                            ),
-                            if (claim.clearanceDescription != null && claim.clearanceDescription!.isNotEmpty)
-                              Text(
-                                'Reason: ${claim.clearanceDescription!}',
-                                style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.black54),
-                              ),
-                          ],
-                        ),
-                      ),
                   ],
                 ),
-              ),
-            );
-          },
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Add New Claim form goes here!')),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () { setState(() { _filterStartDate = null; _filterEndDate = null; _filterStatus = null; }); },
+                    icon: const Icon(Icons.clear_all),
+                    label: const Text('Clear Filters'),
+                  ),
+                ),
+                const SizedBox(height: 15),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: filteredClaims.length,
+                    itemBuilder: (context, index) {
+                      final claim = filteredClaims[index];
+                      Color statusColor = claim.status == 'Claimed' ? Colors.green : Colors.orange;
+                      TextDecoration? textDecoration = claim.status == 'Claimed' ? TextDecoration.lineThrough : null;
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.all(12.0),
+                          title: Text(claim.description, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, decoration: textDecoration)),
+                          subtitle: Text(
+                            'PKR ${claim.amount.toStringAsFixed(2)} for ${claim.companyName ?? 'N/A'} - ${DateFormat('yyyy-MM-dd').format(claim.dateIncurred)}',
+                            style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                          ),
+                          trailing: claim.status == 'Pending'
+                              ? ElevatedButton(
+                            onPressed: () => _markClaimAsPaid(claim, companyClaimService),
+                            child: const Text('Mark Claimed'),
+                          )
+                              : Chip(
+                            label: Text(claim.status, style: const TextStyle(color: Colors.white, fontSize: 10)),
+                            backgroundColor: statusColor,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           );
-          // Example: Navigator.push(context, MaterialPageRoute(builder: (context) => AddEditClaimScreen()));
         },
-        icon: const Icon(Icons.add),
-        label: const Text('Add Claim'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.shopping_cart),
-            label: 'Sales',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.storage),
-            label: 'Stock',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet),
-            label: 'Finance',
-          ),
-        ],
-        currentIndex: _selectedIndex,
-        selectedItemColor: Colors.blue,
-        unselectedItemColor: Colors.grey,
-        onTap: _onItemTapped,
-        type: BottomNavigationBarType.fixed,
       ),
     );
   }

@@ -1,3 +1,4 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,6 +9,9 @@ import 'package:cigarette_agency_management_app/services/auth_service.dart';
 import 'package:cigarette_agency_management_app/services/salesman_service.dart';
 import 'package:cigarette_agency_management_app/services/product_service.dart';
 import 'package:cigarette_agency_management_app/services/brand_service.dart';
+import 'package:cigarette_agency_management_app/services/scheme_service.dart';
+import 'package:cigarette_agency_management_app/services/company_claim_service.dart'; // Add this import
+
 import 'package:cigarette_agency_management_app/UI/screens/auth/login_screen.dart';
 import 'package:cigarette_agency_management_app/UI/screens/home_screen/home_screen.dart';
 
@@ -23,6 +27,8 @@ void main() async {
         Provider<SalesmanService>(create: (_) => SalesmanService()),
         Provider<ProductService>(create: (_) => ProductService()),
         Provider<BrandService>(create: (_) => BrandService()),
+        Provider<SchemeService>(create: (_) => SchemeService()),
+        Provider<CompanyClaimService>(create: (_) => CompanyClaimService()), // Add this provider
       ],
       child: const MyApp(),
     ),

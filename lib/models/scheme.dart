@@ -1,4 +1,6 @@
 // lib/models/scheme.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Scheme {
   final String id;
   final String name;
@@ -7,10 +9,10 @@ class Scheme {
   final bool isActive;
   final DateTime validFrom;
   final DateTime validTo;
-  final String companyName; // NEW FIELD
-  final String productName; // NEW FIELD (more specific than applicableProducts)
-  final String description; // Renamed from original to be more explicit
-  final String applicableProducts; // Keep as general description/fallback
+  final String companyName;
+  final String productName;
+  final String description;
+  final String applicableProducts;
 
   Scheme({
     required this.id,
@@ -26,6 +28,41 @@ class Scheme {
     this.applicableProducts = 'Not specified',
   });
 
+  // Factory constructor to create a Scheme object from a Firestore document
+  factory Scheme.fromMap(Map<String, dynamic> data, String id) {
+    return Scheme(
+      id: id,
+      name: data['name'] ?? '',
+      type: data['type'] ?? '',
+      amount: (data['amount'] as num?)?.toDouble() ?? 0.0,
+      isActive: data['isActive'] ?? false,
+      validFrom: (data['validFrom'] as Timestamp).toDate(),
+      validTo: (data['validTo'] as Timestamp).toDate(),
+      companyName: data['companyName'] ?? '',
+      productName: data['productName'] ?? '',
+      description: data['description'] ?? '',
+      applicableProducts: data['applicableProducts'] ?? '',
+    );
+  }
+
+  // Method to convert a Scheme object into a map for Firestore
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'type': type,
+      'amount': amount,
+      'isActive': isActive,
+      'validFrom': validFrom,
+      'validTo': validTo,
+      'companyName': companyName,
+      'productName': productName,
+      'description': description,
+      'applicableProducts': applicableProducts,
+    };
+  }
+
+  // The rest of your existing code remains unchanged below this line.
+  // ...
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
