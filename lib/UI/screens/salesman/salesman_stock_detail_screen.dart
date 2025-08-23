@@ -32,7 +32,7 @@ class SalesmanStockDetailScreen extends StatefulWidget {
 }
 
 class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
-  int _selectedIndex = 2;
+  int _selectedIndex = 2; // Assuming Stock is the 3rd item (index 2) in bottom nav
 
   DateTime? _filterStartDate;
   DateTime? _filterEndDate;
