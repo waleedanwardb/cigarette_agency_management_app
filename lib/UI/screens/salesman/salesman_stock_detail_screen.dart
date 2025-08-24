@@ -700,342 +700,339 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
         elevation: 0,
       ),
       body: StreamBuilder<List<SalesmanAccountTransaction>>(
-        stream: salesmanService.getSalesmanTransactions(widget.salesman.id),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text('No transactions found.'));
-          }
+          stream: salesmanService.getSalesmanTransactions(widget.salesman.id),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Center(child: Text('Error: ${snapshot.error}'));
+            }
 
-          final allTransactions = snapshot.data!;
-          List<SalesmanAccountTransaction> filteredTransactions =
-          allTransactions.where((transaction) {
-            final transactionDate = transaction.date.toDate();
-            bool matchesStartDate = _filterStartDate == null ||
-                transactionDate.isAtSameMomentAs(_filterStartDate!) ||
-                transactionDate.isAfter(_filterStartDate!);
-            bool matchesEndDate = _filterEndDate == null ||
-                transactionDate.isAtSameMomentAs(_filterEndDate!) ||
-                transactionDate.isBefore(_filterEndDate!);
-            return matchesStartDate && matchesEndDate;
-          }).toList();
+            final allTransactions = snapshot.data ?? [];
+            List<SalesmanAccountTransaction> filteredTransactions =
+            allTransactions.where((transaction) {
+              final transactionDate = transaction.date.toDate();
+              bool matchesStartDate = _filterStartDate == null ||
+                  transactionDate.isAtSameMomentAs(_filterStartDate!) ||
+                  transactionDate.isAfter(_filterStartDate!);
+              bool matchesEndDate = _filterEndDate == null ||
+                  transactionDate.isAtSameMomentAs(_filterEndDate!) ||
+                  transactionDate.isBefore(_filterEndDate!);
+              return matchesStartDate && matchesEndDate;
+            }).toList();
 
-          double stockOutValue = filteredTransactions
-              .where((t) => t.type == 'Stock Out')
-              .fold(0.0, (sum, t) => sum + (t.calculatedPrice ?? 0));
-          double stockReturnValue = filteredTransactions
-              .where((t) => t.type == 'Stock Return')
-              .fold(0.0, (sum, t) => sum + (t.calculatedPrice ?? 0));
-          double totalCashReceived = filteredTransactions
-              .where((t) => t.type == 'Cash Received')
-              .fold(0.0, (sum, t) => sum + (t.cashReceived ?? 0));
-          double totalStockAssigned = filteredTransactions
-              .where((t) => t.type == 'Stock Out')
-              .fold(0.0, (sum, t) => sum + (t.stockOutQuantity ?? 0));
-          double totalStockReturned = filteredTransactions
-              .where((t) => t.type == 'Stock Return')
-              .fold(0.0, (sum, t) => sum + (t.stockReturnQuantity ?? 0));
+            double stockOutValue = filteredTransactions
+                .where((t) => t.type == 'Stock Out')
+                .fold(0.0, (sum, t) => sum + (t.calculatedPrice ?? 0));
+            double stockReturnValue = filteredTransactions
+                .where((t) => t.type == 'Stock Return')
+                .fold(0.0, (sum, t) => sum + (t.calculatedPrice ?? 0));
+            double totalCashReceived = filteredTransactions
+                .where((t) => t.type == 'Cash Received')
+                .fold(0.0, (sum, t) => sum + (t.cashReceived ?? 0));
+            double totalStockAssigned = filteredTransactions
+                .where((t) => t.type == 'Stock Out')
+                .fold(0.0, (sum, t) => sum + (t.stockOutQuantity ?? 0));
+            double totalStockReturned = filteredTransactions
+                .where((t) => t.type == 'Stock Return')
+                .fold(0.0, (sum, t) => sum + (t.stockReturnQuantity ?? 0));
 
-          double totalTransactionValue = stockOutValue - stockReturnValue;
-          double balanceDue = totalTransactionValue - totalCashReceived;
+            double totalTransactionValue = stockOutValue - stockReturnValue;
+            double balanceDue = totalTransactionValue - totalCashReceived;
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 16.0,
-                    mainAxisSpacing: 16.0,
-                    childAspectRatio: 1.2,
-                  ),
-                  itemCount: 4,
-                  itemBuilder: (context, index) {
-                    String title;
-                    String value;
-                    IconData icon;
-                    Color color;
-
-                    switch (index) {
-                      case 0:
-                        title = 'Stock Assigned';
-                        value = (totalStockAssigned - totalStockReturned).toStringAsFixed(0) + ' Packs';
-                        icon = Icons.assignment_turned_in;
-                        color = Colors.blue;
-                        break;
-                      case 1:
-                        title = 'Stock Value';
-                        value = 'PKR ${totalTransactionValue.toStringAsFixed(2)}';
-                        icon = Icons.shopping_cart;
-                        color = Colors.green;
-                        break;
-                      case 2:
-                        title = 'Amount Received';
-                        value = 'PKR ${totalCashReceived.toStringAsFixed(2)}';
-                        icon = Icons.payments;
-                        color = Colors.orange;
-                        break;
-                      case 3:
-                        title = 'Balance Due';
-                        value = 'PKR ${balanceDue.toStringAsFixed(2)}';
-                        icon = Icons.account_balance_wallet;
-                        color = Colors.red;
-                        break;
-                      default:
-                        title = '';
-                        value = '';
-                        icon = Icons.help;
-                        color = Colors.grey;
-                    }
-
-                    return Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Icon(icon, color: color, size: 28),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  title,
-                                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-                                ),
-                                Text(
-                                  value,
-                                  style: const TextStyle(
-                                      fontSize: 18, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 30),
-                const Text(
-                  'Record Actions',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 15),
-                Column(
-                  children: [
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _showStockOutDialog,
-                        icon: const Icon(Icons.outbox),
-                        label: const Text('Record Stock Out'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 16.0,
+                      mainAxisSpacing: 16.0,
+                      childAspectRatio: 1.2,
                     ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _showStockReturnDialog,
-                        icon: const Icon(Icons.assignment_return),
-                        label: const Text('Record Stock Return'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                          backgroundColor: Colors.grey[600],
-                          foregroundColor: Colors.white,
+                    itemCount: 4,
+                    itemBuilder: (context, index) {
+                      String title;
+                      String value;
+                      IconData icon;
+                      Color color;
+
+                      switch (index) {
+                        case 0:
+                          title = 'Stock Assigned';
+                          value = (totalStockAssigned - totalStockReturned).toStringAsFixed(0) + ' Packs';
+                          icon = Icons.assignment_turned_in;
+                          color = Colors.blue;
+                          break;
+                        case 1:
+                          title = 'Stock Value';
+                          value = 'PKR ${totalTransactionValue.toStringAsFixed(2)}';
+                          icon = Icons.shopping_cart;
+                          color = Colors.green;
+                          break;
+                        case 2:
+                          title = 'Amount Received';
+                          value = 'PKR ${totalCashReceived.toStringAsFixed(2)}';
+                          icon = Icons.payments;
+                          color = Colors.orange;
+                          break;
+                        case 3:
+                          title = 'Balance Due';
+                          value = 'PKR ${balanceDue.toStringAsFixed(2)}';
+                          icon = Icons.account_balance_wallet;
+                          color = Colors.red;
+                          break;
+                        default:
+                          title = '';
+                          value = '';
+                          icon = Icons.help;
+                          color = Colors.grey;
+                      }
+
+                      return Card(
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _showCashReceivedDialog,
-                        icon: const Icon(Icons.attach_money),
-                        label: const Text('Record Cash Received'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Icon(icon, color: color, size: 28),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    title,
+                                    style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                                  ),
+                                  Text(
+                                    value,
+                                    style: const TextStyle(
+                                        fontSize: 18, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 30),
-                const Text(
-                  'Filter Transactions',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 15),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        readOnly: true,
-                        controller: TextEditingController(
-                            text: _filterStartDate == null
-                                ? ''
-                                : DateFormat('yyyy-MM-dd')
-                                .format(_filterStartDate!)),
-                        decoration: const InputDecoration(
-                          labelText: 'From Date',
-                          border: OutlineInputBorder(),
-                          suffixIcon: Icon(Icons.calendar_today),
-                        ),
-                        onTap: () async {
-                          DateTime? picked = await showDatePicker(
-                            context: context,
-                            initialDate: _filterStartDate ?? DateTime.now(),
-                            firstDate: DateTime(2000),
-                            lastDate: DateTime(2101),
-                          );
-                          if (picked != null) {
-                            setState(() {
-                              _filterStartDate = picked;
-                            });
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextFormField(
-                        readOnly: true,
-                        controller: TextEditingController(
-                            text: _filterEndDate == null
-                                ? ''
-                                : DateFormat('yyyy-MM-dd').format(_filterEndDate!)),
-                        decoration: const InputDecoration(
-                          labelText: 'To Date',
-                          border: OutlineInputBorder(),
-                          suffixIcon: Icon(Icons.calendar_today),
-                        ),
-                        onTap: () async {
-                          DateTime? picked = await showDatePicker(
-                            context: context,
-                            initialDate: _filterEndDate ?? DateTime.now(),
-                            firstDate: DateTime(2000),
-                            lastDate: DateTime(2101),
-                          );
-                          if (picked != null) {
-                            setState(() {
-                              _filterEndDate = picked;
-                            });
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _filterStartDate = null;
-                        _filterEndDate = null;
-                      });
-                    },
-                    icon: const Icon(Icons.clear_all),
-                    label: const Text('Clear Filters'),
-                  ),
-                ),
-                const SizedBox(height: 30),
-                const Text(
-                  'Recent Transactions',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 15),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    columnSpacing: 12.0,
-                    dataRowMinHeight: 40,
-                    dataRowMaxHeight: 60,
-                    columns: const [
-                      DataColumn(
-                          label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(
-                          label: Text('Type', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(
-                          label: Text('Brand', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(
-                          label: Text('Out (Packs)', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(
-                          label: Text('Return (Packs)', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(
-                          label: Text('Cash Received (PKR)', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(
-                          label: Text('Total Amount (PKR)', style: TextStyle(fontWeight: FontWeight.bold))),
-                      DataColumn(
-                          label: Text('Schemes', style: TextStyle(fontWeight: FontWeight.bold))),
-                    ],
-                    rows: filteredTransactions.map((transaction) {
-                      return DataRow(
-                        cells: [
-                          DataCell(Text(DateFormat('yyyy-MM-dd')
-                              .format(transaction.date.toDate()))),
-                          DataCell(Text(transaction.type)),
-                          DataCell(Text(transaction.brandName ?? '-')),
-                          DataCell(Text(transaction.stockOutQuantity?.toStringAsFixed(0) ?? '-')),
-                          DataCell(Text(transaction.stockReturnQuantity?.toStringAsFixed(0) ?? '-')),
-                          DataCell(Text(transaction.cashReceived?.toStringAsFixed(2) ?? '-')),
-                          DataCell(Text(transaction.calculatedPrice?.toStringAsFixed(2) ?? '-')),
-                          DataCell(
-                              Text(transaction.appliedSchemeNames?.join(', ') ?? '-')),
-                        ],
                       );
-                    }).toList(),
+                    },
                   ),
-                ),
-                const SizedBox(height: 30),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    onPressed: _generateReport,
-                    icon: const Icon(Icons.download),
-                    label: const Text('Generate Report (Excel/PDF)'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                  const SizedBox(height: 30),
+                  const Text(
+                    'Record Actions',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 15),
+                  Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _showStockOutDialog,
+                          icon: const Icon(Icons.outbox),
+                          label: const Text('Record Stock Out'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
                       ),
-                      elevation: 3,
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _showStockReturnDialog,
+                          icon: const Icon(Icons.assignment_return),
+                          label: const Text('Record Stock Return'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            backgroundColor: Colors.grey[600],
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _showCashReceivedDialog,
+                          icon: const Icon(Icons.attach_money),
+                          label: const Text('Record Cash Received'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 30),
+                  const Text(
+                    'Filter Transactions',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 15),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          readOnly: true,
+                          controller: TextEditingController(
+                              text: _filterStartDate == null
+                                  ? ''
+                                  : DateFormat('yyyy-MM-dd')
+                                  .format(_filterStartDate!)),
+                          decoration: const InputDecoration(
+                            labelText: 'From Date',
+                            border: OutlineInputBorder(),
+                            suffixIcon: Icon(Icons.calendar_today),
+                          ),
+                          onTap: () async {
+                            DateTime? picked = await showDatePicker(
+                              context: context,
+                              initialDate: _filterStartDate ?? DateTime.now(),
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime(2101),
+                            );
+                            if (picked != null) {
+                              setState(() {
+                                _filterStartDate = picked;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextFormField(
+                          readOnly: true,
+                          controller: TextEditingController(
+                              text: _filterEndDate == null
+                                  ? ''
+                                  : DateFormat('yyyy-MM-dd').format(_filterEndDate!)),
+                          decoration: const InputDecoration(
+                            labelText: 'To Date',
+                            border: OutlineInputBorder(),
+                            suffixIcon: Icon(Icons.calendar_today),
+                          ),
+                          onTap: () async {
+                            DateTime? picked = await showDatePicker(
+                              context: context,
+                              initialDate: _filterEndDate ?? DateTime.now(),
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime(2101),
+                            );
+                            if (picked != null) {
+                              setState(() {
+                                _filterEndDate = picked;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _filterStartDate = null;
+                          _filterEndDate = null;
+                        });
+                      },
+                      icon: const Icon(Icons.clear_all),
+                      label: const Text('Clear Filters'),
                     ),
                   ),
-                ),
-              ],
-            ),
-          );
-        },
+                  const SizedBox(height: 30),
+                  const Text(
+                    'Recent Transactions',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 15),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      columnSpacing: 12.0,
+                      dataRowMinHeight: 40,
+                      dataRowMaxHeight: 60,
+                      columns: const [
+                        DataColumn(
+                            label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Type', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Brand', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Out (Packs)', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Return (Packs)', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Cash Received (PKR)', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Total Amount (PKR)', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Schemes', style: TextStyle(fontWeight: FontWeight.bold))),
+                      ],
+                      rows: filteredTransactions.map((transaction) {
+                        return DataRow(
+                          cells: [
+                            DataCell(Text(DateFormat('yyyy-MM-dd')
+                                .format(transaction.date.toDate()))),
+                            DataCell(Text(transaction.type)),
+                            DataCell(Text(transaction.brandName ?? '-')),
+                            DataCell(Text(transaction.stockOutQuantity?.toStringAsFixed(0) ?? '-')),
+                            DataCell(Text(transaction.stockReturnQuantity?.toStringAsFixed(0) ?? '-')),
+                            DataCell(Text(transaction.cashReceived?.toStringAsFixed(2) ?? '-')),
+                            DataCell(Text(transaction.calculatedPrice?.toStringAsFixed(2) ?? '-')),
+                            DataCell(
+                                Text(transaction.appliedSchemeNames?.join(', ') ?? '-')),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      onPressed: _generateReport,
+                      icon: const Icon(Icons.download),
+                      label: const Text('Generate Report (Excel/PDF)'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.indigo,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        elevation: 3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[

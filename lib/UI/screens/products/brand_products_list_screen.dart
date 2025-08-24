@@ -63,9 +63,9 @@ class BrandProductsListScreen extends StatelessWidget {
                             product.imageUrl,
                             fit: BoxFit.cover,
                             width: double.infinity,
-                            errorBuilder: (context, error, stackTrace) => const Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
+                            errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey)),
                           )
-                              : const Center(child: Icon(Icons.inventory_2, size: 50, color: Colors.grey)), // Replaced placeholder asset with an icon
+                              : const Center(child: Icon(Icons.inventory_2, size: 50, color: Colors.grey)),
                         ),
                       ),
                       Padding(

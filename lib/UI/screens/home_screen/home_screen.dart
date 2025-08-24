@@ -10,7 +10,6 @@ import 'package:cigarette_agency_management_app/UI/screens/payments/payments_mai
 import 'package:cigarette_agency_management_app/UI/widgets/app_drawer.dart';
 import 'package:cigarette_agency_management_app/UI/screens/products/brand_products_list_screen.dart';
 import 'package:cigarette_agency_management_app/UI/screens/stock/stock_main_screen.dart';
-import 'package:cigarette_agency_management_app/UI/screens/scheme_management/scheme_management_screen.dart';
 
 import 'package:cigarette_agency_management_app/models/brand.dart';
 import 'package:cigarette_agency_management_app/models/product.dart';
@@ -226,7 +225,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       final brandService = Provider.of<BrandService>(context, listen: false);
                       final newBrand = Brand(
-                        id: '',
+                        id: '', // Firestore will generate
                         name: _nameController.text.trim(),
                         icon: '📦',
                         isFrozen: false,
@@ -301,12 +300,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           }
 
                           final brands = snapshot.data!;
-                          // Fix for the crash: find the actual instance from the fetched list
                           if (_selectedBrand != null) {
                             try {
                               _selectedBrand = brands.firstWhere((brand) => brand.id == _selectedBrand!.id);
                             } catch (e) {
-                              // If the previously selected brand is no longer in the list, reset it
                               _selectedBrand = null;
                             }
                           }
@@ -522,8 +519,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                     child: ClipRRect(
                                       borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
                                       child: product.imageUrl.isNotEmpty
-                                          ? Image.network(product.imageUrl, fit: BoxFit.cover, width: double.infinity)
-                                          : Image.asset('assets/placeholder.png', fit: BoxFit.cover),
+                                          ? Image.network(
+                                        product.imageUrl,
+                                        fit: BoxFit.cover,
+                                        width: double.infinity,
+                                        errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey)),
+                                      )
+                                          : const Center(child: Icon(Icons.inventory_2, size: 50, color: Colors.grey)),
                                     ),
                                   ),
                                   Padding(
