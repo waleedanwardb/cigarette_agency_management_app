@@ -1,7 +1,6 @@
 // lib/UI/screens/stock/factory_stock_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import 'package:cigarette_agency_management_app/models/product.dart';
 import 'package:cigarette_agency_management_app/services/product_service.dart';
 

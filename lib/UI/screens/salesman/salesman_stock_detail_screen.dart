@@ -28,7 +28,8 @@ class SalesmanStockDetailScreen extends StatefulWidget {
   const SalesmanStockDetailScreen({super.key, required this.salesman});
 
   @override
-  State<SalesmanStockDetailScreen> createState() => _SalesmanStockDetailScreenState();
+  State<SalesmanStockDetailScreen> createState() =>
+      _SalesmanStockDetailScreenState();
 }
 
 class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
@@ -38,6 +39,7 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
   DateTime? _filterEndDate;
 
   void _onItemTapped(int index) {
+    if (!mounted) return;
     setState(() {
       _selectedIndex = index;
     });
@@ -55,512 +57,459 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
     }
   }
 
-  Future<List<Scheme>?> _showMultiSelectSchemeDialog(
-      BuildContext context, List<Scheme> currentSelectedSchemes) async {
+  Future<void> _showStockOutDialog({SalesmanAccountTransaction? transaction}) async {
+    final _formKey = GlobalKey<FormState>();
+    DateTime selectedDate = transaction?.date.toDate() ?? DateTime.now();
+    final productService = Provider.of<ProductService>(context, listen: false);
+    final salesmanService =
+    Provider.of<SalesmanService>(context, listen: false);
+    final companyClaimService =
+    Provider.of<CompanyClaimService>(context, listen: false);
     final schemeService = Provider.of<SchemeService>(context, listen: false);
-    final allActiveSchemes = await schemeService.getSchemes().first;
-    final List<Scheme> tempSelectedSchemes = List.from(currentSelectedSchemes);
 
-    return await showDialog<List<Scheme>>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: const Text('Select Schemes to Apply'),
-          content: SingleChildScrollView(
-            child: StatefulBuilder(
-              builder: (context, setStateInDialog) {
-                return ListBody(
-                  children: allActiveSchemes.map((scheme) {
-                    bool isSelected = tempSelectedSchemes.any((s) => s.id == scheme.id);
-                    return CheckboxListTile(
-                      value: isSelected,
-                      title: Text('${scheme.name} (PKR ${scheme.amount.toStringAsFixed(2)}/pack)'),
-                      subtitle: Text(scheme.description),
-                      onChanged: (bool? checked) {
+    bool _isLoading = false;
+    List<Product> _allProducts = [];
+    List<Scheme> _allActiveSchemes = [];
+    Map<String, TextEditingController> _quantityControllers = {};
+    Map<String, double> _grossPrices = {};
+    Map<String, double> _schemeDiscounts = {};
+    Map<String, double> _finalPrices = {};
+    Map<String, List<Scheme>> _appliedSchemes = {};
+
+    _allProducts = await productService.getProducts().first;
+    _allActiveSchemes = await schemeService.getSchemes().first;
+
+    for (var product in _allProducts) {
+      _quantityControllers[product.id] = TextEditingController(text: transaction?.stockOutQuantity?.toString() ?? '');
+      _grossPrices[product.id] = 0.0;
+      _schemeDiscounts[product.id] = 0.0;
+      _finalPrices[product.id] = 0.0;
+      _appliedSchemes[product.id] = [];
+    }
+    if (transaction != null) {
+      // Pre-fill quantities if editing
+      final product = _allProducts.firstWhere((p) => p.name == transaction.productName);
+      _quantityControllers[product.id]?.text = transaction.stockOutQuantity.toString();
+    }
+
+
+    void updateCalculations(Function setStateInDialog) {
+      if (!mounted) return;
+      for (var product in _allProducts) {
+        double quantity =
+            double.tryParse(_quantityControllers[product.id]!.text) ?? 0.0;
+        double pricePerUnit = product.price;
+        _grossPrices[product.id] = quantity * pricePerUnit;
+
+        _appliedSchemes[product.id] = _allActiveSchemes
+            .where((s) => s.productId == product.id)
+            .toList();
+        _schemeDiscounts[product.id] = 0.0;
+        for (var scheme in _appliedSchemes[product.id]!) {
+          _schemeDiscounts[product.id] =
+              _schemeDiscounts[product.id]! + (scheme.amount * quantity);
+        }
+
+        _finalPrices[product.id] =
+            _grossPrices[product.id]! - _schemeDiscounts[product.id]!;
+        if (_finalPrices[product.id]! < 0) _finalPrices[product.id] = 0;
+      }
+      setStateInDialog(() {});
+    }
+
+    await showDialog<void>(
+        context: context,
+        builder: (BuildContext dialogContext) {
+          return StatefulBuilder(builder: (context, setStateInDialog) {
+            return AlertDialog(
+              title: Text(transaction == null ? 'Record Stock Out' : 'Edit Stock Out'),
+              content: SingleChildScrollView(
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ..._allProducts.map((product) {
+                        final schemesForProduct = _allActiveSchemes
+                            .where((s) => s.productId == product.id)
+                            .toList();
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                TextFormField(
+                                  controller: _quantityControllers[product.id],
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    labelText:
+                                    '${product.name} (${product.brand}) Packs',
+                                    hintText: 'Price/Pack: PKR ${product.price.toStringAsFixed(2)}',
+                                    border: const OutlineInputBorder(),
+                                  ),
+                                  onChanged: (value) =>
+                                      updateCalculations(setStateInDialog),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                    'Cost of Packs: PKR ${_grossPrices[product.id]!.toStringAsFixed(2)}'),
+                                if (schemesForProduct.isNotEmpty)
+                                  ...schemesForProduct.map((scheme) {
+                                    return Text(
+                                        '${scheme.name} Discount: -PKR ${scheme.amount.toStringAsFixed(2)}',
+                                        style: const TextStyle(
+                                            color: Colors.deepOrange));
+                                  }).toList(),
+                                Text(
+                                    'Total Scheme Discount: PKR ${_schemeDiscounts[product.id]!.toStringAsFixed(2)}'),
+                                Text(
+                                  'Final Amount: PKR ${_finalPrices[product.id]!.toStringAsFixed(2)}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                      if (_isLoading)
+                        const Center(child: CircularProgressIndicator()),
+                    ],
+                  ),
+                ),
+              ),
+              actions: <Widget>[
+                TextButton(
+                  child: const Text('Cancel'),
+                  onPressed: _isLoading
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                ),
+                ElevatedButton(
+                  onPressed: _isLoading
+                      ? null
+                      : () async {
+                    if (_formKey.currentState!.validate()) {
+                      if (!mounted) return;
+                      setStateInDialog(() {
+                        _isLoading = true;
+                      });
+                      try {
+                        for (var product in _allProducts) {
+                          final quantity = double.tryParse(
+                              _quantityControllers[product.id]!
+                                  .text) ??
+                              0.0;
+                          if (quantity > 0) {
+                            final newTransaction =
+                            SalesmanAccountTransaction(
+                              id: transaction?.id ?? '',
+                              salesmanId: widget.salesman.id,
+                              description:
+                              'Stock out of ${product.name}',
+                              date: Timestamp.fromDate(selectedDate),
+                              type: 'Stock Out',
+                              productName: product.name,
+                              brandName: product.brand,
+                              stockOutQuantity: quantity,
+                              totalSchemeDiscount:
+                              _schemeDiscounts[product.id],
+                              calculatedPrice: _finalPrices[product.id],
+                              grossPrice: _grossPrices[product.id],
+                              appliedSchemeNames:
+                              _appliedSchemes[product.id]
+                                  ?.map((s) => s.name)
+                                  .toList(),
+                            );
+
+                            if (transaction == null) {
+                              await salesmanService
+                                  .recordSalesmanTransaction(
+                                salesmanId: widget.salesman.id,
+                                transaction: newTransaction,
+                              );
+                            } else {
+                              await salesmanService.updateSalesmanTransaction(widget.salesman.id, newTransaction);
+                            }
+
+
+                            if (_schemeDiscounts[product.id]! > 0) {
+                              final newClaim = CompanyClaim(
+                                id: '',
+                                type: 'Scheme Amount',
+                                description:
+                                'Claim for scheme discount on ${product.name}',
+                                amount: _schemeDiscounts[product.id]!,
+                                status: 'Pending',
+                                dateIncurred: selectedDate,
+                                brandName: product.brand,
+                                productName: product.name,
+                                schemeNames:
+                                _appliedSchemes[product.id]!
+                                    .map((s) => s.name)
+                                    .toList(),
+                                packsAffected: quantity,
+                                companyName: product.brand,
+                              );
+                              await companyClaimService
+                                  .addCompanyClaim(newClaim);
+                            }
+                          }
+                        }
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content: Text(
+                                  'Stock Out transaction ${transaction == null ? 'recorded' : 'updated'} successfully!')),
+                        );
+                        Navigator.of(dialogContext).pop();
+                      } catch (e) {
+                        debugPrint('Error recording stock out: $e');
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content: Text(
+                                  'Failed to record transaction: $e')),
+                        );
+                      } finally {
+                        if (!mounted) return;
                         setStateInDialog(() {
-                          if (checked != null && checked) {
-                            if (!tempSelectedSchemes.any((s) => s.id == scheme.id)) {
-                              tempSelectedSchemes.add(scheme);
-                            }
-                          } else {
-                            tempSelectedSchemes.removeWhere((s) => s.id == scheme.id);
-                          }
+                          _isLoading = false;
                         });
+                      }
+                    }
+                  },
+                  child: Text(transaction == null ? 'Confirm Stock Out' : 'Update'),
+                ),
+              ],
+            );
+          });
+        });
+    for (var controller in _quantityControllers.values) {
+      controller.dispose();
+    }
+  }
+
+  Future<void> _showStockReturnDialog({SalesmanAccountTransaction? transaction}) async {
+    final _formKey = GlobalKey<FormState>();
+    DateTime selectedDate = transaction?.date.toDate() ?? DateTime.now();
+
+    final productService = Provider.of<ProductService>(context, listen: false);
+    final salesmanService =
+    Provider.of<SalesmanService>(context, listen: false);
+    final companyClaimService =
+    Provider.of<CompanyClaimService>(context, listen: false);
+    final schemeService = Provider.of<SchemeService>(context, listen: false);
+
+    bool _isLoading = false;
+    List<Product> _allProducts = [];
+    List<Scheme> _allActiveSchemes = [];
+    Map<String, TextEditingController> _quantityControllers = {};
+    Map<String, double> _grossPrices = {};
+    Map<String, double> _schemeDiscounts = {};
+    Map<String, double> _finalPrices = {};
+    Map<String, List<Scheme>> _appliedSchemes = {};
+
+    _allProducts = await productService.getProducts().first;
+    _allActiveSchemes = await schemeService.getSchemes().first;
+
+    for (var product in _allProducts) {
+      _quantityControllers[product.id] = TextEditingController(text: transaction?.stockReturnQuantity?.toString() ?? '');
+      _grossPrices[product.id] = 0.0;
+      _schemeDiscounts[product.id] = 0.0;
+      _finalPrices[product.id] = 0.0;
+      _appliedSchemes[product.id] = [];
+    }
+    if (transaction != null) {
+      // Pre-fill quantities if editing
+      final product = _allProducts.firstWhere((p) => p.name == transaction.productName);
+      _quantityControllers[product.id]?.text = transaction.stockReturnQuantity.toString();
+    }
+
+    void updateCalculations(Function setStateInDialog) {
+      if (!mounted) return;
+      double totalGross = 0;
+      double totalDiscount = 0;
+      double totalFinal = 0;
+
+      for (var product in _allProducts) {
+        double quantity =
+            double.tryParse(_quantityControllers[product.id]!.text) ?? 0.0;
+        double pricePerUnit = product.price;
+        _grossPrices[product.id] = quantity * pricePerUnit;
+
+        _appliedSchemes[product.id] = _allActiveSchemes
+            .where((s) => s.productId == product.id)
+            .toList();
+        _schemeDiscounts[product.id] = 0.0;
+        for (var scheme in _appliedSchemes[product.id]!) {
+          _schemeDiscounts[product.id] =
+              _schemeDiscounts[product.id]! + (scheme.amount * quantity);
+        }
+
+        _finalPrices[product.id] =
+            _grossPrices[product.id]! - _schemeDiscounts[product.id]!;
+        if (_finalPrices[product.id]! < 0) _finalPrices[product.id] = 0;
+
+        totalGross += _grossPrices[product.id]!;
+        totalDiscount += _schemeDiscounts[product.id]!;
+        totalFinal += _finalPrices[product.id]!;
+      }
+      setStateInDialog(() {});
+    }
+
+    await showDialog<void>(
+        context: context,
+        builder: (BuildContext dialogContext) {
+          return StatefulBuilder(builder: (context, setStateInDialog) {
+            return AlertDialog(
+                title: Text(transaction == null ?'Record Stock Return' : 'Edit Stock Return'),
+                content: SingleChildScrollView(
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ..._allProducts.map((product) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: TextFormField(
+                              controller: _quantityControllers[product.id],
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText:
+                                '${product.name} (${product.brand}) Return Packs',
+                                border: const OutlineInputBorder(),
+                              ),
+                              onChanged: (value) =>
+                                  updateCalculations(setStateInDialog),
+                            ),
+                          );
+                        }).toList(),
+                        if (_isLoading)
+                          const Center(child: CircularProgressIndicator()),
+                      ],
+                    ),
+                  ),
+                ),
+                actions: <Widget>[
+                  TextButton(
+                    child: const Text('Cancel'),
+                    onPressed: _isLoading
+                        ? null
+                        : () => Navigator.of(dialogContext).pop(),
+                  ),
+                  ElevatedButton(
+                      onPressed: _isLoading
+                          ? null
+                          : () async {
+                        if (_formKey.currentState!.validate()) {
+                          setStateInDialog(() {
+                            _isLoading = true;
+                          });
+                          try {
+                            for (var product in _allProducts) {
+                              final quantity = double.tryParse(
+                                  _quantityControllers[product.id]!
+                                      .text) ??
+                                  0.0;
+                              if (quantity > 0) {
+                                final newTransaction =
+                                SalesmanAccountTransaction(
+                                  id: transaction?.id ?? '',
+                                  salesmanId: widget.salesman.id,
+                                  description:
+                                  'Stock return of ${product.name}',
+                                  date: Timestamp.fromDate(selectedDate),
+                                  type: 'Stock Return',
+                                  productName: product.name,
+                                  brandName: product.brand,
+                                  stockReturnQuantity: quantity,
+                                  totalSchemeDiscount:
+                                  _schemeDiscounts[product.id],
+                                  calculatedPrice:
+                                  -_finalPrices[product.id]!,
+                                  grossPrice: -_grossPrices[product.id]!,
+                                  appliedSchemeNames:
+                                  _appliedSchemes[product.id]
+                                      ?.map((s) => s.name)
+                                      .toList(),
+                                );
+                                if (transaction == null) {
+                                  await salesmanService
+                                      .recordSalesmanTransaction(
+                                    salesmanId: widget.salesman.id,
+                                    transaction: newTransaction,
+                                  );
+                                } else {
+                                  await salesmanService.updateSalesmanTransaction(widget.salesman.id, newTransaction);
+                                }
+
+
+                                if (_schemeDiscounts[product.id]! > 0) {
+                                  final newClaim = CompanyClaim(
+                                    id: '',
+                                    type: 'Scheme Amount (Return)',
+                                    description:
+                                    'Claim adjustment for returned scheme on ${product.name}',
+                                    amount:
+                                    -_schemeDiscounts[product.id]!,
+                                    status: 'Pending',
+                                    dateIncurred: selectedDate,
+                                    brandName: product.brand,
+                                    productName: product.name,
+                                    schemeNames: _appliedSchemes[
+                                    product.id]!
+                                        .map((s) => s.name)
+                                        .toList(),
+                                    packsAffected: quantity,
+                                    companyName: product.brand,
+                                  );
+                                  await companyClaimService
+                                      .addCompanyClaim(newClaim);
+                                }
+                              }
+                            }
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                  content: Text(
+                                      'Stock Return transaction ${transaction == null ? 'recorded' : 'updated'} successfully!')),
+                            );
+                            Navigator.of(dialogContext).pop();
+                          } catch (e) {
+                            debugPrint(
+                                'Error recording stock return: $e');
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                  content: Text(
+                                      'Failed to record transaction: $e')),
+                            );
+                          } finally {
+                            if (!mounted) return;
+                            setStateInDialog(() {
+                              _isLoading = false;
+                            });
+                          }
+                        }
                       },
-                    );
-                  }).toList(),
-                );
-              },
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(dialogContext).pop(null);
-              },
-            ),
-            ElevatedButton(
-              child: const Text('Apply'),
-              onPressed: () {
-                Navigator.of(dialogContext).pop(tempSelectedSchemes);
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _showStockOutDialog() async {
-    final _formKey = GlobalKey<FormState>();
-    Product? selectedProduct;
-    final _quantityController = TextEditingController();
-    DateTime selectedDate = DateTime.now();
-
-    final productService = Provider.of<ProductService>(context, listen: false);
-    final salesmanService = Provider.of<SalesmanService>(context, listen: false);
-    final companyClaimService = Provider.of<CompanyClaimService>(context, listen: false);
-
-    double _dialogCalculatedGrossPrice = 0.0;
-    double _dialogTotalSchemeDiscount = 0.0;
-    double _dialogFinalPriceAfterScheme = 0.0;
-    List<Scheme> _dialogSelectedSchemes = [];
-    bool _isLoading = false;
-
-    void updateCalculations(Function setStateInDialog) {
-      double quantity = double.tryParse(_quantityController.text) ?? 0.0;
-      double pricePerUnit = selectedProduct?.price ?? 0.0;
-
-      setStateInDialog(() {
-        _dialogCalculatedGrossPrice = quantity * pricePerUnit;
-        _dialogTotalSchemeDiscount = 0.0;
-        for (var scheme in _dialogSelectedSchemes) {
-          _dialogTotalSchemeDiscount += scheme.amount * quantity;
-        }
-        _dialogFinalPriceAfterScheme = _dialogCalculatedGrossPrice - _dialogTotalSchemeDiscount;
-        if (_dialogFinalPriceAfterScheme < 0) _dialogFinalPriceAfterScheme = 0;
-      });
+                      child: Text(transaction == null ? 'Confirm Return': 'Update'))
+                ]);
+          });
+        });
+    for (var controller in _quantityControllers.values) {
+      controller.dispose();
     }
-
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setStateInDialog) {
-            return AlertDialog(
-              title: const Text('Record Stock Out'),
-              content: SingleChildScrollView(
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      StreamBuilder<List<Product>>(
-                        stream: productService.getProducts(),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return const CircularProgressIndicator();
-                          }
-                          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                            return const Text('No products available.');
-                          }
-                          return DropdownButtonFormField<Product>(
-                            decoration: const InputDecoration(
-                              labelText: 'Choose Product',
-                              border: OutlineInputBorder(),
-                            ),
-                            value: selectedProduct,
-                            items: snapshot.data!.map((product) {
-                              return DropdownMenuItem<Product>(
-                                value: product,
-                                child: Text('${product.name} (${product.brand})'),
-                              );
-                            }).toList(),
-                            onChanged: (Product? newValue) {
-                              setStateInDialog(() {
-                                selectedProduct = newValue;
-                                _dialogSelectedSchemes = [];
-                                updateCalculations(setStateInDialog);
-                              });
-                            },
-                            validator: (value) => value == null ? 'Please select a product' : null,
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 15),
-                      TextFormField(
-                        controller: _quantityController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Amount of Stock (Packs)',
-                          border: OutlineInputBorder(),
-                        ),
-                        onChanged: (value) => updateCalculations(setStateInDialog),
-                        validator: (value) {
-                          if (value == null || double.tryParse(value) == null || double.parse(value) <= 0) {
-                            return 'Please enter a valid quantity.';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 15),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () async {
-                            final List<Scheme>? picked =
-                            await _showMultiSelectSchemeDialog(context, _dialogSelectedSchemes);
-                            if (picked != null) {
-                              setStateInDialog(() {
-                                _dialogSelectedSchemes = picked;
-                                updateCalculations(setStateInDialog);
-                              });
-                            }
-                          },
-                          icon: const Icon(Icons.loyalty),
-                          label: Text('Apply Schemes (${_dialogSelectedSchemes.length} selected)'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.teal[400],
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 15),
-                      TextField(
-                        readOnly: true,
-                        controller: TextEditingController(
-                            text: 'Gross: PKR ${_dialogCalculatedGrossPrice.toStringAsFixed(2)}'),
-                        decoration: InputDecoration(
-                          labelText: 'Gross Price',
-                          border: const OutlineInputBorder(),
-                          fillColor: Colors.grey[100],
-                          filled: true,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        readOnly: true,
-                        controller: TextEditingController(
-                            text: 'Total Scheme Discount: PKR ${_dialogTotalSchemeDiscount.toStringAsFixed(2)}'),
-                        decoration: InputDecoration(
-                          labelText: 'Total Scheme Discount',
-                          border: const OutlineInputBorder(),
-                          fillColor: Colors.orange[50],
-                          filled: true,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        readOnly: true,
-                        controller: TextEditingController(
-                            text: 'Final: PKR ${_dialogFinalPriceAfterScheme.toStringAsFixed(2)}'),
-                        decoration: InputDecoration(
-                          labelText: 'Final Price (After Scheme)',
-                          border: const OutlineInputBorder(),
-                          fillColor: Colors.lightGreen[50],
-                          filled: true,
-                        ),
-                      ),
-                      if (_isLoading) const Center(child: CircularProgressIndicator()),
-                    ],
-                  ),
-                ),
-              ),
-              actions: <Widget>[
-                TextButton(
-                  child: const Text('Cancel'),
-                  onPressed: _isLoading ? null : () => Navigator.of(dialogContext).pop(),
-                ),
-                ElevatedButton(
-                  onPressed: _isLoading || _formKey.currentState == null || !_formKey.currentState!.validate() || selectedProduct == null
-                      ? null
-                      : () async {
-                    setStateInDialog(() { _isLoading = true; });
-
-                    final transaction = SalesmanAccountTransaction(
-                      id: '',
-                      salesmanId: widget.salesman.id,
-                      description: 'Stock out of ${selectedProduct!.name}',
-                      date: Timestamp.fromDate(selectedDate),
-                      type: 'Stock Out',
-                      productName: selectedProduct!.name,
-                      brandName: selectedProduct!.brand,
-                      stockOutQuantity: double.parse(_quantityController.text),
-                      totalSchemeDiscount: _dialogTotalSchemeDiscount,
-                      calculatedPrice: _dialogFinalPriceAfterScheme,
-                      grossPrice: _dialogCalculatedGrossPrice,
-                      appliedSchemeNames: _dialogSelectedSchemes.map((s) => s.name).toList(),
-                    );
-
-                    try {
-                      await salesmanService.recordSalesmanTransaction(
-                        salesmanId: widget.salesman.id,
-                        transaction: transaction,
-                      );
-
-                      if (_dialogTotalSchemeDiscount > 0) {
-                        final newClaim = CompanyClaim(
-                          id: '',
-                          type: 'Scheme Amount',
-                          description: 'Claim for scheme discount on ${selectedProduct!.name}',
-                          amount: _dialogTotalSchemeDiscount,
-                          status: 'Pending',
-                          dateIncurred: selectedDate,
-                          brandName: selectedProduct!.brand,
-                          productName: selectedProduct!.name,
-                          schemeNames: _dialogSelectedSchemes.map((s) => s.name).toList(),
-                          packsAffected: double.parse(_quantityController.text),
-                          companyName: selectedProduct!.brand,
-                        );
-                        await companyClaimService.addCompanyClaim(newClaim);
-                      }
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Stock Out transaction recorded successfully!')),
-                      );
-                      Navigator.of(dialogContext).pop();
-                    } catch (e) {
-                      debugPrint('Error recording stock out: $e');
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to record transaction: $e')),
-                      );
-                    } finally {
-                      setStateInDialog(() { _isLoading = false; });
-                    }
-                  },
-                  child: const Text('Confirm Stock Out'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-    _quantityController.dispose();
   }
 
-  Future<void> _showStockReturnDialog() async {
+  Future<void> _showCashReceivedDialog({SalesmanAccountTransaction? transaction}) async {
     final _formKey = GlobalKey<FormState>();
-    Product? selectedProduct;
-    final _quantityController = TextEditingController();
-    DateTime selectedDate = DateTime.now();
-
-    final productService = Provider.of<ProductService>(context, listen: false);
-    final salesmanService = Provider.of<SalesmanService>(context, listen: false);
-    final companyClaimService = Provider.of<CompanyClaimService>(context, listen: false);
-
-    double _dialogCalculatedGrossPrice = 0.0;
-    double _dialogTotalSchemeDiscount = 0.0;
-    double _dialogFinalPriceAfterScheme = 0.0;
-    List<Scheme> _dialogSelectedSchemes = [];
-    bool _isLoading = false;
-
-    void updateCalculations(Function setStateInDialog) {
-      double quantity = double.tryParse(_quantityController.text) ?? 0.0;
-      double pricePerUnit = selectedProduct?.price ?? 0.0;
-
-      setStateInDialog(() {
-        _dialogCalculatedGrossPrice = quantity * pricePerUnit;
-        _dialogTotalSchemeDiscount = 0.0;
-        for (var scheme in _dialogSelectedSchemes) {
-          _dialogTotalSchemeDiscount += scheme.amount * quantity;
-        }
-        _dialogFinalPriceAfterScheme = _dialogCalculatedGrossPrice - _dialogTotalSchemeDiscount;
-        if (_dialogFinalPriceAfterScheme < 0) _dialogFinalPriceAfterScheme = 0;
-      });
-    }
-
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setStateInDialog) {
-            return AlertDialog(
-              title: const Text('Record Stock Return'),
-              content: SingleChildScrollView(
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      StreamBuilder<List<Product>>(
-                        stream: productService.getProducts(),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return const CircularProgressIndicator();
-                          }
-                          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                            return const Text('No products available.');
-                          }
-                          return DropdownButtonFormField<Product>(
-                            decoration: const InputDecoration(
-                              labelText: 'Choose Product',
-                              border: OutlineInputBorder(),
-                            ),
-                            value: selectedProduct,
-                            items: snapshot.data!.map((product) {
-                              return DropdownMenuItem<Product>(
-                                value: product,
-                                child: Text('${product.name} (${product.brand})'),
-                              );
-                            }).toList(),
-                            onChanged: (Product? newValue) {
-                              setStateInDialog(() {
-                                selectedProduct = newValue;
-                                _dialogSelectedSchemes = [];
-                                updateCalculations(setStateInDialog);
-                              });
-                            },
-                            validator: (value) => value == null ? 'Please select a product' : null,
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 15),
-                      TextFormField(
-                        controller: _quantityController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Return Quantity (Packs)',
-                          border: OutlineInputBorder(),
-                        ),
-                        onChanged: (value) => updateCalculations(setStateInDialog),
-                        validator: (value) {
-                          if (value == null || double.tryParse(value) == null || double.parse(value) <= 0) {
-                            return 'Please enter a valid quantity.';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 15),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () async {
-                            final List<Scheme>? picked =
-                            await _showMultiSelectSchemeDialog(context, _dialogSelectedSchemes);
-                            if (picked != null) {
-                              setStateInDialog(() {
-                                _dialogSelectedSchemes = picked;
-                                updateCalculations(setStateInDialog);
-                              });
-                            }
-                          },
-                          icon: const Icon(Icons.loyalty),
-                          label: Text('Applied Schemes (${_dialogSelectedSchemes.length} selected)'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.teal[400],
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 15),
-                      TextField(
-                        readOnly: true,
-                        controller: TextEditingController(
-                            text: 'PKR ${_dialogFinalPriceAfterScheme.toStringAsFixed(2)} Value'),
-                        decoration: InputDecoration(
-                          labelText: 'Calculated Return Value',
-                          border: const OutlineInputBorder(),
-                          fillColor: Colors.grey[100],
-                          filled: true,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        readOnly: true,
-                        controller: TextEditingController(
-                            text: 'Total Scheme Discount: PKR ${_dialogTotalSchemeDiscount.toStringAsFixed(2)}'),
-                        decoration: InputDecoration(
-                          labelText: 'Total Scheme Discount (Return)',
-                          border: const OutlineInputBorder(),
-                          fillColor: Colors.orange[50],
-                          filled: true,
-                        ),
-                      ),
-                      if (_isLoading) const Center(child: CircularProgressIndicator()),
-                    ],
-                  ),
-                ),
-              ),
-              actions: <Widget>[
-                TextButton(
-                  child: const Text('Cancel'),
-                  onPressed: _isLoading ? null : () => Navigator.of(dialogContext).pop(),
-                ),
-                ElevatedButton(
-                  onPressed: _isLoading || _formKey.currentState == null || !_formKey.currentState!.validate() || selectedProduct == null
-                      ? null
-                      : () async {
-                    setStateInDialog(() { _isLoading = true; });
-
-                    final transaction = SalesmanAccountTransaction(
-                      id: '',
-                      salesmanId: widget.salesman.id,
-                      description: 'Stock return of ${selectedProduct!.name}',
-                      date: Timestamp.fromDate(selectedDate),
-                      type: 'Stock Return',
-                      productName: selectedProduct!.name,
-                      brandName: selectedProduct!.brand,
-                      stockReturnQuantity: double.parse(_quantityController.text),
-                      totalSchemeDiscount: _dialogTotalSchemeDiscount,
-                      calculatedPrice: -_dialogFinalPriceAfterScheme,
-                      grossPrice: -_dialogCalculatedGrossPrice,
-                      appliedSchemeNames: _dialogSelectedSchemes.map((s) => s.name).toList(),
-                    );
-
-                    try {
-                      await salesmanService.recordSalesmanTransaction(
-                        salesmanId: widget.salesman.id,
-                        transaction: transaction,
-                      );
-
-                      if (_dialogTotalSchemeDiscount > 0) {
-                        final newClaim = CompanyClaim(
-                          id: '',
-                          type: 'Scheme Amount (Return)',
-                          description: 'Claim adjustment for returned scheme on ${selectedProduct!.name}',
-                          amount: -_dialogTotalSchemeDiscount,
-                          status: 'Pending',
-                          dateIncurred: selectedDate,
-                          brandName: selectedProduct!.brand,
-                          productName: selectedProduct!.name,
-                          schemeNames: _dialogSelectedSchemes.map((s) => s.name).toList(),
-                          packsAffected: double.parse(_quantityController.text),
-                          companyName: selectedProduct!.brand,
-                        );
-                        await companyClaimService.addCompanyClaim(newClaim);
-                      }
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Stock Return transaction recorded successfully!')),
-                      );
-                      Navigator.of(dialogContext).pop();
-                    } catch (e) {
-                      debugPrint('Error recording stock return: $e');
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to record transaction: $e')),
-                      );
-                    } finally {
-                      setStateInDialog(() { _isLoading = false; });
-                    }
-                  },
-                  child: const Text('Confirm Return'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-    _quantityController.dispose();
-  }
-
-  Future<void> _showCashReceivedDialog() async {
-    final _formKey = GlobalKey<FormState>();
-    final _amountController = TextEditingController();
-    DateTime selectedDate = DateTime.now();
-    final salesmanService = Provider.of<SalesmanService>(context, listen: false);
+    final _amountController = TextEditingController(text: transaction?.cashReceived?.toString() ?? '');
+    DateTime selectedDate = transaction?.date.toDate() ?? DateTime.now();
+    final salesmanService =
+    Provider.of<SalesmanService>(context, listen: false);
     bool _isLoading = false;
 
     await showDialog(
@@ -569,7 +518,7 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
         return StatefulBuilder(
           builder: (context, setStateInDialog) {
             return AlertDialog(
-              title: const Text('Record Cash Received'),
+              title: Text(transaction == null ? 'Record Cash Received' : 'Edit Cash Received'),
               content: Form(
                 key: _formKey,
                 child: Column(
@@ -579,9 +528,12 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                       controller: _amountController,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
-                          labelText: 'Amount (PKR)', border: OutlineInputBorder()),
+                          labelText: 'Amount (PKR)',
+                          border: OutlineInputBorder()),
                       validator: (value) {
-                        if (value == null || double.tryParse(value) == null || double.parse(value) <= 0) {
+                        if (value == null ||
+                            double.tryParse(value) == null ||
+                            double.parse(value) <= 0) {
                           return 'Please enter a valid amount.';
                         }
                         return null;
@@ -605,55 +557,78 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                           lastDate: DateTime(2101),
                         );
                         if (picked != null && picked != selectedDate) {
+                          if (!mounted) return;
                           setStateInDialog(() {
                             selectedDate = picked;
                           });
                         }
                       },
                     ),
-                    if (_isLoading) const Center(child: CircularProgressIndicator()),
+                    if (_isLoading)
+                      const Center(child: CircularProgressIndicator()),
                   ],
                 ),
               ),
               actions: [
                 TextButton(
                   child: const Text('Cancel'),
-                  onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+                  onPressed:
+                  _isLoading ? null : () => Navigator.of(context).pop(),
                 ),
                 ElevatedButton(
-                  onPressed: _isLoading || _formKey.currentState == null || !_formKey.currentState!.validate()
+                  onPressed: _isLoading ||
+                      _formKey.currentState == null ||
+                      !_formKey.currentState!.validate()
                       ? null
                       : () async {
-                    setStateInDialog(() { _isLoading = true; });
+                    if (!mounted) return;
+                    setStateInDialog(() {
+                      _isLoading = true;
+                    });
 
-                    final transaction = SalesmanAccountTransaction(
-                      id: '',
+                    final newTransaction = SalesmanAccountTransaction(
+                      id: transaction?.id ?? '',
                       salesmanId: widget.salesman.id,
                       description: 'Cash payment from salesman.',
                       date: Timestamp.fromDate(selectedDate),
                       type: 'Cash Received',
-                      cashReceived: double.parse(_amountController.text),
+                      cashReceived:
+                      double.parse(_amountController.text),
                     );
 
                     try {
-                      await salesmanService.recordSalesmanTransaction(
-                        salesmanId: widget.salesman.id,
-                        transaction: transaction,
-                      );
+                      if (transaction == null) {
+                        await salesmanService.recordSalesmanTransaction(
+                          salesmanId: widget.salesman.id,
+                          transaction: newTransaction,
+                        );
+                      } else {
+                        await salesmanService.updateSalesmanTransaction(widget.salesman.id, newTransaction);
+                      }
+
+                      if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Cash received transaction recorded successfully!')),
+                        SnackBar(
+                            content: Text(
+                                'Cash received transaction ${transaction == null ? 'recorded' : 'updated'} successfully!')),
                       );
                       Navigator.of(context).pop();
                     } catch (e) {
                       debugPrint('Error recording cash received: $e');
+                      if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to record transaction: $e')),
+                        SnackBar(
+                            content: Text(
+                                'Failed to record transaction: $e')),
                       );
                     } finally {
-                      setStateInDialog(() { _isLoading = false; });
+                      if (!mounted) return;
+                      setStateInDialog(() {
+                        _isLoading = false;
+                      });
                     }
                   },
-                  child: const Text('Confirm'),
+                  child: Text(transaction == null ? 'Confirm' : 'Update'),
                 ),
               ],
             );
@@ -749,7 +724,8 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                   GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    gridDelegate:
+                    const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
                       crossAxisSpacing: 16.0,
                       mainAxisSpacing: 16.0,
@@ -765,19 +741,23 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                       switch (index) {
                         case 0:
                           title = 'Stock Assigned';
-                          value = (totalStockAssigned - totalStockReturned).toStringAsFixed(0) + ' Packs';
+                          value = (totalStockAssigned - totalStockReturned)
+                              .toStringAsFixed(0) +
+                              ' Packs';
                           icon = Icons.assignment_turned_in;
                           color = Colors.blue;
                           break;
                         case 1:
                           title = 'Stock Value';
-                          value = 'PKR ${totalTransactionValue.toStringAsFixed(2)}';
+                          value =
+                          'PKR ${totalTransactionValue.toStringAsFixed(2)}';
                           icon = Icons.shopping_cart;
                           color = Colors.green;
                           break;
                         case 2:
                           title = 'Amount Received';
-                          value = 'PKR ${totalCashReceived.toStringAsFixed(2)}';
+                          value =
+                          'PKR ${totalCashReceived.toStringAsFixed(2)}';
                           icon = Icons.payments;
                           color = Colors.orange;
                           break;
@@ -811,12 +791,15 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                                 children: [
                                   Text(
                                     title,
-                                    style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[700]),
                                   ),
                                   Text(
                                     value,
                                     style: const TextStyle(
-                                        fontSize: 18, fontWeight: FontWeight.bold),
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold),
                                   ),
                                 ],
                               ),
@@ -829,7 +812,8 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                   const SizedBox(height: 30),
                   const Text(
                     'Record Actions',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    style:
+                    TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 15),
                   Column(
@@ -841,7 +825,8 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                           icon: const Icon(Icons.outbox),
                           label: const Text('Record Stock Out'),
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            padding:
+                            const EdgeInsets.symmetric(vertical: 15),
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10)),
                             backgroundColor: Colors.blue,
@@ -857,7 +842,8 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                           icon: const Icon(Icons.assignment_return),
                           label: const Text('Record Stock Return'),
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            padding:
+                            const EdgeInsets.symmetric(vertical: 15),
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10)),
                             backgroundColor: Colors.grey[600],
@@ -873,7 +859,8 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                           icon: const Icon(Icons.attach_money),
                           label: const Text('Record Cash Received'),
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            padding:
+                            const EdgeInsets.symmetric(vertical: 15),
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10)),
                             backgroundColor: Colors.green,
@@ -886,7 +873,8 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                   const SizedBox(height: 30),
                   const Text(
                     'Filter Transactions',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    style:
+                    TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 15),
                   Row(
@@ -907,11 +895,13 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                           onTap: () async {
                             DateTime? picked = await showDatePicker(
                               context: context,
-                              initialDate: _filterStartDate ?? DateTime.now(),
+                              initialDate:
+                              _filterStartDate ?? DateTime.now(),
                               firstDate: DateTime(2000),
                               lastDate: DateTime(2101),
                             );
                             if (picked != null) {
+                              if (!mounted) return;
                               setState(() {
                                 _filterStartDate = picked;
                               });
@@ -926,7 +916,8 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                           controller: TextEditingController(
                               text: _filterEndDate == null
                                   ? ''
-                                  : DateFormat('yyyy-MM-dd').format(_filterEndDate!)),
+                                  : DateFormat('yyyy-MM-dd')
+                                  .format(_filterEndDate!)),
                           decoration: const InputDecoration(
                             labelText: 'To Date',
                             border: OutlineInputBorder(),
@@ -940,6 +931,7 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                               lastDate: DateTime(2101),
                             );
                             if (picked != null) {
+                              if (!mounted) return;
                               setState(() {
                                 _filterEndDate = picked;
                               });
@@ -949,7 +941,6 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton.icon(
@@ -966,7 +957,8 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                   const SizedBox(height: 30),
                   const Text(
                     'Recent Transactions',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    style:
+                    TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 15),
                   SingleChildScrollView(
@@ -977,21 +969,41 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                       dataRowMaxHeight: 60,
                       columns: const [
                         DataColumn(
-                            label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
+                            label: Text('Date',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
                         DataColumn(
-                            label: Text('Type', style: TextStyle(fontWeight: FontWeight.bold))),
+                            label: Text('Type',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
                         DataColumn(
-                            label: Text('Brand', style: TextStyle(fontWeight: FontWeight.bold))),
+                            label: Text('Brand',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
                         DataColumn(
-                            label: Text('Out (Packs)', style: TextStyle(fontWeight: FontWeight.bold))),
+                            label: Text('Out (Packs)',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
                         DataColumn(
-                            label: Text('Return (Packs)', style: TextStyle(fontWeight: FontWeight.bold))),
+                            label: Text('Return (Packs)',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
                         DataColumn(
-                            label: Text('Cash Received (PKR)', style: TextStyle(fontWeight: FontWeight.bold))),
+                            label: Text('Cash Received (PKR)',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
                         DataColumn(
-                            label: Text('Total Amount (PKR)', style: TextStyle(fontWeight: FontWeight.bold))),
+                            label: Text('Total Amount (PKR)',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
                         DataColumn(
-                            label: Text('Schemes', style: TextStyle(fontWeight: FontWeight.bold))),
+                            label: Text('Schemes',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Actions',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold))),
                       ],
                       rows: filteredTransactions.map((transaction) {
                         return DataRow(
@@ -1000,12 +1012,63 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                                 .format(transaction.date.toDate()))),
                             DataCell(Text(transaction.type)),
                             DataCell(Text(transaction.brandName ?? '-')),
-                            DataCell(Text(transaction.stockOutQuantity?.toStringAsFixed(0) ?? '-')),
-                            DataCell(Text(transaction.stockReturnQuantity?.toStringAsFixed(0) ?? '-')),
-                            DataCell(Text(transaction.cashReceived?.toStringAsFixed(2) ?? '-')),
-                            DataCell(Text(transaction.calculatedPrice?.toStringAsFixed(2) ?? '-')),
+                            DataCell(Text(transaction.stockOutQuantity
+                                ?.toStringAsFixed(0) ??
+                                '-')),
+                            DataCell(Text(transaction.stockReturnQuantity
+                                ?.toStringAsFixed(0) ??
+                                '-')),
+                            DataCell(Text(transaction.cashReceived
+                                ?.toStringAsFixed(2) ??
+                                '-')),
+                            DataCell(Text(transaction.calculatedPrice
+                                ?.toStringAsFixed(2) ??
+                                '-')),
+                            DataCell(Text(transaction.appliedSchemeNames
+                                ?.join(', ') ??
+                                '-')),
                             DataCell(
-                                Text(transaction.appliedSchemeNames?.join(', ') ?? '-')),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit),
+                                    onPressed: () {
+                                      if (transaction.type == 'Stock Out') {
+                                        _showStockOutDialog(transaction: transaction);
+                                      } else if (transaction.type == 'Stock Return') {
+                                        _showStockReturnDialog(transaction: transaction);
+                                      } else if (transaction.type == 'Cash Received') {
+                                        _showCashReceivedDialog(transaction: transaction);
+                                      }
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red),
+                                    onPressed: () {
+                                      showDialog(context: context, builder: (BuildContext context) {
+                                        return AlertDialog(
+                                          title: const Text('Confirm Delete'),
+                                          content: const Text('Are you sure you want to delete this transaction?'),
+                                          actions: [
+                                            TextButton(
+                                              child: const Text('Cancel'),
+                                              onPressed: () => Navigator.of(context).pop(),
+                                            ),
+                                            TextButton(
+                                              child: const Text('Delete'),
+                                              onPressed: () {
+                                                salesmanService.deleteSalesmanTransaction(widget.salesman.id, transaction.id);
+                                                Navigator.of(context).pop();
+                                              },
+                                            ),
+                                          ],
+                                        );
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                         );
                       }).toList(),
@@ -1032,8 +1095,7 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
                 ],
               ),
             );
-          }
-      ),
+          }),
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(

@@ -1,10 +1,10 @@
 // lib/UI/screens/products/brand_products_list_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import 'package:cigarette_agency_management_app/models/brand.dart';
 import 'package:cigarette_agency_management_app/models/product.dart';
 import 'package:cigarette_agency_management_app/services/product_service.dart';
+import 'add_edit_product_screen.dart'; // Import AddEditProductScreen
 
 class BrandProductsListScreen extends StatelessWidget {
   final Brand brand;
@@ -51,6 +51,10 @@ class BrandProductsListScreen extends StatelessWidget {
                 child: InkWell(
                   onTap: () {
                     // Navigate to product detail or edit screen if needed
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => AddEditProductScreen(product: product, brand: brand)),
+                    );
                   },
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -89,6 +93,15 @@ class BrandProductsListScreen extends StatelessWidget {
             },
           );
         },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => AddEditProductScreen(brand: brand)),
+          );
+        },
+        child: const Icon(Icons.add),
       ),
     );
   }

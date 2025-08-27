@@ -2,64 +2,47 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/foundation.dart';
-
 import 'package:cigarette_agency_management_app/models/product.dart';
 
 class ProductService {
-  final CollectionReference _productsCollection =
-  FirebaseFirestore.instance.collection('products');
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
-  // Get a stream of all products
   Stream<List<Product>> getProducts() {
-    return _productsCollection.orderBy('brand').snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) => Product.fromMap(doc.data() as Map<String, dynamic>, doc.id)).toList();
-    });
+    return _db.collection('products').snapshots().map((snapshot) =>
+        snapshot.docs.map((doc) => Product.fromFirestore(doc)).toList());
   }
 
-  // Get a stream of products for a specific brand
   Stream<List<Product>> getProductsByBrandId(String brandId) {
-    return _productsCollection.where('brandId', isEqualTo: brandId).snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) => Product.fromMap(doc.data() as Map<String, dynamic>, doc.id)).toList();
-    });
+    return _db
+        .collection('products')
+        .where('brandId', isEqualTo: brandId)
+        .snapshots()
+        .map((snapshot) =>
+        snapshot.docs.map((doc) => Product.fromFirestore(doc)).toList());
   }
 
-  // Add a new product
   Future<void> addProduct(Product product, File? imageFile) async {
-    String? imageUrl;
+    String imageUrl = '';
     if (imageFile != null) {
-      imageUrl = await _uploadImage(imageFile, 'product_images/${product.name}_${DateTime.now().millisecondsSinceEpoch}.png');
+      final ref = _storage.ref().child('product_images').child('${DateTime.now().toIso8601String()}');
+      await ref.putFile(imageFile);
+      imageUrl = await ref.getDownloadURL();
     }
-    final newProductRef = await _productsCollection.add(product.toMap());
-    if (imageUrl != null) {
-      await newProductRef.update({'imageUrl': imageUrl});
-    }
+    await _db.collection('products').add(product.copyWith(imageUrl: imageUrl).toFirestore());
   }
 
-  // Update an existing product
   Future<void> updateProduct(Product product, {File? newImage}) async {
-    String? imageUrl = product.imageUrl;
+    String imageUrl = product.imageUrl;
     if (newImage != null) {
-      imageUrl = await _uploadImage(newImage, 'product_images/${product.name}_${DateTime.now().millisecondsSinceEpoch}.png');
+      final ref = _storage.ref().child('product_images').child('${DateTime.now().toIso8601String()}');
+      await ref.putFile(newImage);
+      imageUrl = await ref.getDownloadURL();
     }
-    await _productsCollection.doc(product.id).update(product.copyWith(imageUrl: imageUrl).toMap());
+    await _db.collection('products').doc(product.id).update(product.copyWith(imageUrl: imageUrl).toFirestore());
   }
 
-  // Delete a product
-  Future<void> deleteProduct(String productId) async {
-    await _productsCollection.doc(productId).delete();
-  }
-
-  Future<String?> _uploadImage(File imageFile, String path) async {
-    try {
-      final ref = _storage.ref().child(path);
-      final uploadTask = ref.putFile(imageFile);
-      final snapshot = await uploadTask.whenComplete(() {});
-      return await snapshot.ref.getDownloadURL();
-    } catch (e) {
-      debugPrint('Error uploading image: $e');
-      return null;
-    }
+  Future<void> deleteProduct(String productId) {
+    return _db.collection('products').doc(productId).delete();
   }
 }

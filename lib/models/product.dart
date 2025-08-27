@@ -7,9 +7,9 @@ class Product {
   final String brand;
   final String brandId;
   final double price;
-  final bool inStock;
   final int stockQuantity;
   final bool isFrozen;
+  final bool inStock;
   final String imageUrl;
 
   Product({
@@ -18,51 +18,49 @@ class Product {
     required this.brand,
     required this.brandId,
     required this.price,
-    required this.inStock,
     required this.stockQuantity,
     required this.isFrozen,
-    required this.imageUrl,
+    required this.inStock,
+    this.imageUrl = '',
   });
 
-  // Factory constructor to create a Product object from a Firestore document
-  factory Product.fromMap(Map<String, dynamic> data, String id) {
+  factory Product.fromFirestore(DocumentSnapshot doc) {
+    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     return Product(
-      id: id,
+      id: doc.id,
       name: data['name'] ?? '',
       brand: data['brand'] ?? '',
       brandId: data['brandId'] ?? '',
-      price: (data['price'] as num?)?.toDouble() ?? 0.0,
-      inStock: data['inStock'] ?? false,
+      price: (data['price'] ?? 0.0).toDouble(),
       stockQuantity: data['stockQuantity'] ?? 0,
       isFrozen: data['isFrozen'] ?? false,
+      inStock: data['inStock'] ?? true,
       imageUrl: data['imageUrl'] ?? '',
     );
   }
 
-  // Method to convert a Product object into a map for Firestore
-  Map<String, dynamic> toMap() {
+  Map<String, dynamic> toFirestore() {
     return {
       'name': name,
       'brand': brand,
       'brandId': brandId,
       'price': price,
-      'inStock': inStock,
       'stockQuantity': stockQuantity,
       'isFrozen': isFrozen,
+      'inStock': inStock,
       'imageUrl': imageUrl,
     };
   }
 
-  // A helper method for updating a product with new values
   Product copyWith({
     String? id,
     String? name,
     String? brand,
     String? brandId,
     double? price,
-    bool? inStock,
     int? stockQuantity,
     bool? isFrozen,
+    bool? inStock,
     String? imageUrl,
   }) {
     return Product(
@@ -71,9 +69,9 @@ class Product {
       brand: brand ?? this.brand,
       brandId: brandId ?? this.brandId,
       price: price ?? this.price,
-      inStock: inStock ?? this.inStock,
       stockQuantity: stockQuantity ?? this.stockQuantity,
       isFrozen: isFrozen ?? this.isFrozen,
+      inStock: inStock ?? this.inStock,
       imageUrl: imageUrl ?? this.imageUrl,
     );
   }

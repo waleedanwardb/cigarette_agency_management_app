@@ -11,8 +11,9 @@ import 'package:cigarette_agency_management_app/services/brand_service.dart';
 
 class AddEditProductScreen extends StatefulWidget {
   final Product? product;
+  final Brand? brand; // Pass brand for pre-selection
 
-  const AddEditProductScreen({super.key, this.product});
+  const AddEditProductScreen({super.key, this.product, this.brand});
 
   @override
   State<AddEditProductScreen> createState() => _AddEditProductScreenState();
@@ -26,13 +27,31 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
   Brand? _selectedBrand;
   File? _pickedImage;
   final ImagePicker _picker = ImagePicker();
+  String? _initialImageUrl;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.product?.name ?? '');
     _priceController = TextEditingController(text: widget.product?.price.toString() ?? '');
-    _stockController = TextEditingController(text: widget.product?.stockQuantity.toString() ?? '');
+    _stockController = TextEditingController(text: widget.product?.stockQuantity.toString() ?? '0');
+    _selectedBrand = widget.brand;
+    _initialImageUrl = widget.product?.imageUrl;
+
+    if (widget.product != null && widget.brand == null) {
+      // If editing a product but no brand is passed, fetch the brand
+      _loadBrand();
+    }
+  }
+
+  Future<void> _loadBrand() async {
+    final brandService = Provider.of<BrandService>(context, listen: false);
+    final brands = await brandService.getBrands().first;
+    if (mounted) {
+      setState(() {
+        _selectedBrand = brands.firstWhere((b) => b.id == widget.product!.brandId);
+      });
+    }
   }
 
   @override
@@ -48,12 +67,13 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
     if (pickedFile != null) {
       setState(() {
         _pickedImage = File(pickedFile.path);
+        _initialImageUrl = null; // Clear initial image if a new one is picked
       });
     }
   }
 
   Future<void> _saveProduct() async {
-    if (_formKey.currentState!.validate()) {
+    if (_formKey.currentState!.validate() && _selectedBrand != null) {
       final productService = Provider.of<ProductService>(context, listen: false);
 
       final newProduct = Product(
@@ -62,20 +82,28 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
         brand: _selectedBrand!.name,
         brandId: _selectedBrand!.id,
         price: double.parse(_priceController.text.trim()),
-        inStock: int.parse(_stockController.text.trim()) > 0,
-        stockQuantity: int.parse(_stockController.text.trim()),
+        inStock: (int.tryParse(_stockController.text.trim()) ?? 0) > 0,
+        stockQuantity: int.tryParse(_stockController.text.trim()) ?? 0,
         isFrozen: widget.product?.isFrozen ?? false,
         imageUrl: widget.product?.imageUrl ?? '',
       );
 
-      if (widget.product == null) {
-        await productService.addProduct(newProduct, _pickedImage);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Product added successfully!')));
-      } else {
-        await productService.updateProduct(newProduct, newImage: _pickedImage);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Product updated successfully!')));
+      try {
+        if (widget.product == null) {
+          await productService.addProduct(newProduct, _pickedImage);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Product added successfully!')));
+        } else {
+          await productService.updateProduct(newProduct, newImage: _pickedImage);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Product updated successfully!')));
+        }
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to save product: $e')));
+        }
       }
-      Navigator.of(context).pop();
     }
   }
 
@@ -117,11 +145,8 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
               StreamBuilder<List<Brand>>(
                 stream: brandService.getBrands(),
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
+                  if (!snapshot.hasData) {
                     return const CircularProgressIndicator();
-                  }
-                  if (snapshot.hasError) {
-                    return Text('Error: ${snapshot.error}');
                   }
                   final brands = snapshot.data ?? [];
                   if (brands.isEmpty) {
@@ -157,9 +182,12 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
               if (_pickedImage != null) ...[
                 const SizedBox(height: 16),
                 Image.file(_pickedImage!, height: 150),
-              ] else if (widget.product?.imageUrl.isNotEmpty == true) ...[
+              ] else if (_initialImageUrl != null && _initialImageUrl!.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                Image.network(widget.product!.imageUrl, height: 150),
+                Image.network(_initialImageUrl!, height: 150),
+              ] else ...[
+                const SizedBox(height: 16),
+                const Icon(Icons.image, size: 150, color: Colors.grey),
               ],
               const SizedBox(height: 32),
               SizedBox(
