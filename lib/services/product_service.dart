@@ -22,6 +22,26 @@ class ProductService {
         snapshot.docs.map((doc) => Product.fromFirestore(doc)).toList());
   }
 
+  // NEW: Method to get only non-lighter products
+  Stream<List<Product>> getFactoryProducts() {
+    return _db
+        .collection('products')
+        .where('brand', isNotEqualTo: 'Lighter Brand Name') // Use your actual lighter brand name here
+        .snapshots()
+        .map((snapshot) =>
+        snapshot.docs.map((doc) => Product.fromFirestore(doc)).toList());
+  }
+
+  // NEW: Method to get only lighter products
+  Stream<List<Product>> getLighterProducts() {
+    return _db
+        .collection('products')
+        .where('brand', isEqualTo: 'Lighter Brand Name') // Use your actual lighter brand name here
+        .snapshots()
+        .map((snapshot) =>
+        snapshot.docs.map((doc) => Product.fromFirestore(doc)).toList());
+  }
+
   Future<void> addProduct(Product product, File? imageFile) async {
     String imageUrl = '';
     if (imageFile != null) {

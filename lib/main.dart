@@ -10,7 +10,8 @@ import 'package:cigarette_agency_management_app/services/salesman_service.dart';
 import 'package:cigarette_agency_management_app/services/product_service.dart';
 import 'package:cigarette_agency_management_app/services/brand_service.dart';
 import 'package:cigarette_agency_management_app/services/scheme_service.dart';
-import 'package:cigarette_agency_management_app/services/company_claim_service.dart'; // Add this import
+import 'package:cigarette_agency_management_app/services/company_claim_service.dart';
+import 'package:cigarette_agency_management_app/services/mt_service.dart'; // NEW: Import MTService
 
 import 'package:cigarette_agency_management_app/UI/screens/auth/login_screen.dart';
 import 'package:cigarette_agency_management_app/UI/screens/home_screen/home_screen.dart';
@@ -28,7 +29,8 @@ void main() async {
         Provider<ProductService>(create: (_) => ProductService()),
         Provider<BrandService>(create: (_) => BrandService()),
         Provider<SchemeService>(create: (_) => SchemeService()),
-        Provider<CompanyClaimService>(create: (_) => CompanyClaimService()), // Add this provider
+        Provider<CompanyClaimService>(create: (_) => CompanyClaimService()),
+        Provider<MTService>(create: (_) => MTService()), // NEW: Add MTService
       ],
       child: const MyApp(),
     ),

@@ -85,7 +85,61 @@ class SalesmanService {
     await transactionCollection.add(transaction.toFirestore());
   }
 
-  // New methods for Arrear management
+  Future<void> updateSalesmanTransaction(
+      String salesmanId, SalesmanAccountTransaction transaction) async {
+    final transactionCollection = _salesmanCollection.doc(salesmanId).collection('transactions');
+    await transactionCollection.doc(transaction.id).update(transaction.toFirestore());
+  }
+
+  Stream<List<SalesmanAccountTransaction>> getSalesmanTransactionsInDateRange(
+      String salesmanId, DateTime startDate, DateTime endDate) {
+    return _salesmanCollection
+        .doc(salesmanId)
+        .collection('transactions')
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+        .where('date', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) => SalesmanAccountTransaction.fromFirestore(doc.data(), doc.id)).toList();
+    });
+  }
+
+  Map<String, double> calculateSalesmanStock(List<SalesmanAccountTransaction> transactions) {
+    final Map<String, double> stock = {};
+    for (var t in transactions) {
+      if (t.productName != null) {
+        if (!stock.containsKey(t.productName)) {
+          stock[t.productName!] = 0.0;
+        }
+        if (t.type == 'Stock Out') {
+          stock[t.productName!] = stock[t.productName]! + (t.stockOutQuantity ?? 0.0);
+        } else if (t.type == 'Stock Return') {
+          stock[t.productName!] = stock[t.productName]! - (t.stockReturnQuantity ?? 0.0);
+        }
+      }
+    }
+    return stock;
+  }
+
+  double calculateSalesmanAccountTotal(List<SalesmanAccountTransaction> transactions) {
+    double total = 0.0;
+    for (var t in transactions) {
+      if (t.type == 'Stock Out') {
+        total += t.calculatedPrice ?? 0.0;
+      } else if (t.type == 'Stock Return') {
+        total += t.calculatedPrice ?? 0.0;
+      } else if (t.type == 'Cash Received') {
+        total -= t.cashReceived ?? 0.0;
+      }
+    }
+    return total;
+  }
+
+  Future<void> deleteSalesmanTransaction(String salesmanId, String transactionId) async {
+    await _salesmanCollection.doc(salesmanId).collection('transactions').doc(transactionId).delete();
+  }
+
   Future<void> addArrear(Arrear arrear) async {
     await _arrearCollection.add(arrear.toFirestore());
   }

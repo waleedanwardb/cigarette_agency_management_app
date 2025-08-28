@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 // Import all your screen files using the correct package name
+import 'package:cigarette_agency_management_app/UI/screens/mt_management/mt_management_screen.dart';
 import 'package:cigarette_agency_management_app/UI/screens/dashboard/dashboard_screen.dart';
 import 'package:cigarette_agency_management_app/UI/screens/home_screen/home_screen.dart'; // Often needed for BottomNav
 import 'package:cigarette_agency_management_app/UI/screens/salesman/salesman_stock_list_screen.dart';
@@ -134,12 +135,7 @@ class AppDrawer extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.card_membership),
             title: const Text('MT Management'),
-            onTap: () {
-              _navigateToScreen(context, const Center(child: Text('MT Management Screen Placeholder')));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('MT Management Screen not implemented yet.')),
-              );
-            },
+            onTap: () => _navigateToScreen(context, const MTManagementScreen()),
           ),
           // --- PLACEHOLDER: Lighter Stock ---
           ListTile(

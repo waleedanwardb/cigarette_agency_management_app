@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 
 import 'package:cigarette_agency_management_app/models/company_claim.dart';
 import 'package:cigarette_agency_management_app/services/company_claim_service.dart';
+import 'package:cigarette_agency_management_app/UI/screens/mt_management/add_mt_claim_screen.dart';
+import 'package:cigarette_agency_management_app/UI/screens/vehicle/add_vehicle_expense_screen.dart';
 
 class CompanyClaimsScreen extends StatefulWidget {
   const CompanyClaimsScreen({super.key});
@@ -83,6 +85,36 @@ class _CompanyClaimsScreenState extends State<CompanyClaimsScreen> {
               child: const Text('Delete'),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  void _showAddClaimOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext bc) {
+        return SafeArea(
+          child: Wrap(
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.monetization_on),
+                title: const Text('Add MT Claim'),
+                onTap: () {
+                  Navigator.pop(bc);
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const AddMTClaimScreen()));
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.car_rental),
+                title: const Text('Add Vehicle Expense'),
+                onTap: () {
+                  Navigator.pop(bc);
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const AddVehicleExpenseScreen()));
+                },
+              ),
+            ],
+          ),
         );
       },
     );
@@ -230,6 +262,10 @@ class _CompanyClaimsScreenState extends State<CompanyClaimsScreen> {
             ),
           );
         },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddClaimOptions,
+        child: const Icon(Icons.add),
       ),
     );
   }

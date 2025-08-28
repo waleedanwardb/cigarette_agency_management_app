@@ -26,6 +26,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // Fix: Removed _selectedIndex and _widgetOptions as this screen will now be
+  // the dedicated home view. The index will be managed by the parent navigator.
+
   void _showBrandOptions(
       BuildContext context, Brand brand, BrandService brandService) {
     showModalBottomSheet(
@@ -285,6 +288,7 @@ class _HomeScreenState extends State<HomeScreen> {
         elevation: 0,
       ),
       drawer: const AppDrawer(),
+      // FIX: The body now contains the actual home screen content.
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -634,12 +638,11 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Finance',
           ),
         ],
-        currentIndex: 0, // Home is the first item
+        currentIndex: 0,
         selectedItemColor: Colors.blue,
         unselectedItemColor: Colors.grey,
         onTap: (index) {
           if (index != 0) {
-            // Navigate if not already on Home
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
