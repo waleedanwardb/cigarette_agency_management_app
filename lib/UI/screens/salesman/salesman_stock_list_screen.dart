@@ -1,18 +1,15 @@
 // lib/UI/screens/salesman/salesman_stock_list_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 import 'package:cigarette_agency_management_app/models/salesman.dart';
-import 'package:cigarette_agency_management_app/UI/screens/salesman/add_salesman_screen.dart';
-import 'package:cigarette_agency_management_app/UI/screens/salesman/salesman_stock_detail_screen.dart'; // Correct import
 import 'package:cigarette_agency_management_app/services/salesman_service.dart';
+import 'package:cigarette_agency_management_app/UI/widgets/app_drawer.dart';
+import 'package:cigarette_agency_management_app/UI/screens/salesman/add_salesman_screen.dart';
+import 'package:cigarette_agency_management_app/UI/screens/salesman/salesman_stock_detail_screen.dart';
 
-import 'package:cigarette_agency_management_app/UI/screens/home_screen/home_screen.dart';
-import 'package:cigarette_agency_management_app/UI/screens/dashboard/dashboard_screen.dart';
-import 'package:cigarette_agency_management_app/UI/screens/stock/stock_main_screen.dart';
-import 'package:cigarette_agency_management_app/UI/screens/payments/payments_main_screen.dart';
 
 
 class SalesmanStockListScreen extends StatefulWidget {
@@ -23,26 +20,15 @@ class SalesmanStockListScreen extends StatefulWidget {
 }
 
 class _SalesmanStockListScreenState extends State<SalesmanStockListScreen> {
-  int _selectedIndex = 2; // Stock screen index
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
-
-  void _navigateToAddEditSalesmanScreen({Salesman? salesman}) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AddSalesmanScreen(salesman: salesman),
-      ),
-    );
-  }
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _phoneNumberController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _idCardNumberController = TextEditingController();
+  File? _pickedImage;
+  bool _isLoading = false;
 
   void _showSalesmanOptions(BuildContext context, Salesman salesman) {
-    final salesmanService = Provider.of<SalesmanService>(context, listen: false);
-
     showModalBottomSheet(
       context: context,
       builder: (BuildContext bc) {
@@ -50,22 +36,42 @@ class _SalesmanStockListScreenState extends State<SalesmanStockListScreen> {
           child: Wrap(
             children: <Widget>[
               ListTile(
-                leading: const Icon(Icons.edit),
-                title: const Text('Edit Profile'),
+                leading: const Icon(Icons.info),
+                title: const Text('View Details'),
                 onTap: () {
                   Navigator.pop(bc);
-                  _navigateToAddEditSalesmanScreen(salesman: salesman);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => SalesmanStockDetailScreen(salesman: salesman),
+                    ),
+                  );
                 },
               ),
               ListTile(
-                leading: Icon(salesman.isFrozen ? Icons.person_add_disabled : Icons.person_off),
+                leading: const Icon(Icons.edit),
+                title: const Text('Edit Salesman'),
+                onTap: () {
+                  Navigator.pop(bc);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => AddSalesmanScreen(salesman: salesman),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: Icon(salesman.isFrozen ? Icons.lock_open : Icons.lock),
                 title: Text(salesman.isFrozen ? 'Unfreeze Salesman' : 'Freeze Salesman'),
                 onTap: () async {
                   Navigator.pop(bc);
-                  final updatedSalesman = salesman.copyWith(isFrozen: !salesman.isFrozen);
-                  await salesmanService.updateSalesman(updatedSalesman);
+                  final salesmanService = Provider.of<SalesmanService>(context, listen: false);
+                  await salesmanService.updateSalesman(salesman.copyWith(isFrozen: !salesman.isFrozen));
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('${salesman.name} is now ${updatedSalesman.isFrozen ? 'Frozen' : 'Unfrozen'}!')),
+                    SnackBar(
+                      content: Text('${salesman.name} is now ${salesman.isFrozen ? 'unfrozen' : 'frozen'}!'),
+                    ),
                   );
                 },
               ),
@@ -74,40 +80,34 @@ class _SalesmanStockListScreenState extends State<SalesmanStockListScreen> {
                 title: const Text('Delete Salesman'),
                 onTap: () {
                   Navigator.pop(bc);
-                  _confirmDeleteSalesman(salesman, salesmanService);
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Confirm Delete'),
+                      content: Text('Are you sure you want to delete salesman "${salesman.name}"?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () async {
+                            Navigator.pop(context);
+                            final salesmanService = Provider.of<SalesmanService>(context, listen: false);
+                            await salesmanService.deleteSalesman(salesman.id);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('${salesman.name} deleted!')),
+                            );
+                          },
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
                 },
               ),
             ],
           ),
-        );
-      },
-    );
-  }
-
-  void _confirmDeleteSalesman(Salesman salesman, SalesmanService salesmanService) {
-    showDialog(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: const Text('Confirm Delete'),
-          content: Text('Are you sure you want to delete salesman "${salesman.name}"? This will remove all their records.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.of(dialogContext).pop();
-                await salesmanService.deleteSalesman(salesman.id);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${salesman.name} deleted successfully!')),
-                );
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('Delete'),
-            ),
-          ],
         );
       },
     );
@@ -119,138 +119,74 @@ class _SalesmanStockListScreenState extends State<SalesmanStockListScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Salesman Management',
-          style: TextStyle(fontSize: 18),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-        ),
-        centerTitle: true,
+        title: const Text('Salesman List'),
         elevation: 0,
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Search Salesman...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
+      drawer: const AppDrawer(),
+      body: StreamBuilder<List<Salesman>>(
+        stream: salesmanService.getSalesmen(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+          final salesmen = snapshot.data ?? [];
+          if (salesmen.isEmpty) {
+            return const Center(child: Text('No salesmen found.'));
+          }
+          return ListView.builder(
+            itemCount: salesmen.length,
+            itemBuilder: (context, index) {
+              final salesman = salesmen[index];
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                elevation: 4,
+                shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
+                  side: salesman.isFrozen
+                      ? const BorderSide(color: Colors.red, width: 2)
+                      : BorderSide.none,
                 ),
-                filled: true,
-                fillColor: Colors.grey[200],
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
-              ),
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder<List<Salesman>>(
-              stream: salesmanService.getSalesmen(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  debugPrint(snapshot.error.toString());
-                  return Center(child: Text('Error fetching data: ${snapshot.error}'));
-                }
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'No salesmen added yet.\nTap "+" to add a new salesman.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                    ),
-                  );
-                }
-
-                final salesmen = snapshot.data!;
-                return ListView.builder(
-                  itemCount: salesmen.length,
-                  itemBuilder: (context, index) {
-                    final salesman = salesmen[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        side: salesman.isFrozen ? const BorderSide(color: Colors.red, width: 2) : BorderSide.none,
-                      ),
-                      child: InkWell(
-                        onTap: () {
-                          // Correctly navigate to the SalesmanStockDetailScreen
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => SalesmanStockDetailScreen(salesman: salesman),
-                            ),
-                          );
-                        },
-                        onLongPress: () => _showSalesmanOptions(context, salesman),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 25,
-                                backgroundImage: salesman.imageUrl.isNotEmpty ? NetworkImage(salesman.imageUrl) : null,
-                                backgroundColor: Colors.grey[200],
-                                child: salesman.imageUrl.isEmpty
-                                    ? Icon(Icons.person, size: 30, color: Colors.grey[600])
-                                    : null,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      salesman.name,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        decoration: salesman.isFrozen ? TextDecoration.lineThrough : null,
-                                      ),
-                                    ),
-                                    Text(
-                                      'ID: ${salesman.idCardNumber}',
-                                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                                    ),
-                                    Text(
-                                      'Status: ${salesman.isFrozen ? 'Frozen' : 'Active'}',
-                                      style: TextStyle(fontSize: 12, color: salesman.isFrozen ? Colors.red : Colors.green),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                            ],
-                          ),
-                        ),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundImage: salesman.imageUrl.isNotEmpty
+                        ? NetworkImage(salesman.imageUrl)
+                        : null,
+                    child: salesman.imageUrl.isEmpty
+                        ? const Icon(Icons.person)
+                        : null,
+                  ),
+                  title: Text(salesman.name),
+                  subtitle: Text(salesman.phoneNumber),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.more_vert),
+                    onPressed: () => _showSalesmanOptions(context, salesman),
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => SalesmanStockDetailScreen(salesman: salesman),
                       ),
                     );
                   },
-                );
-              },
-            ),
-          ),
-        ],
+                ),
+              );
+            },
+          );
+        },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _navigateToAddEditSalesmanScreen(),
-        icon: const Icon(Icons.person_add),
-        label: const Text('Add Salesman'),
-        backgroundColor: Theme.of(context).primaryColor,
-        foregroundColor: Colors.white,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AddSalesmanScreen()),
+          );
+        },
+        child: const Icon(Icons.add),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }

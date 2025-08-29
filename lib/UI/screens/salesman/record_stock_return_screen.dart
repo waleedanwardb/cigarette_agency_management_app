@@ -109,6 +109,8 @@ class _RecordStockReturnScreenState extends State<RecordStockReturnScreen> {
       final companyClaimService = Provider.of<CompanyClaimService>(context, listen: false);
 
       try {
+        double totalClaimAmount = 0.0;
+        double totalExpectedPrice = 0.0;
         for (var product in _allProducts) {
           final quantity = double.tryParse(_quantityControllers[product.id]!.text) ?? 0.0;
           final cashReceived = double.tryParse(_cashReceivedController.text) ?? 0.0;
@@ -136,39 +138,45 @@ class _RecordStockReturnScreenState extends State<RecordStockReturnScreen> {
               await salesmanService.updateSalesmanTransaction(widget.salesman.id, newTransaction);
             }
 
-            if (_schemeDiscounts[product.id]! > 0) {
-              final newClaim = CompanyClaim(
-                id: '',
-                type: 'Scheme Amount (Return)',
-                description: 'Claim adjustment for returned scheme on ${product.name}',
-                amount: -_schemeDiscounts[product.id]!,
-                status: 'Pending',
-                dateIncurred: _selectedDate,
-                brandName: product.brand,
-                productName: product.name,
-                schemeNames: _appliedSchemes[product.id]!.map((s) => s.name).toList(),
-                packsAffected: quantity,
-                companyName: product.brand,
-              );
-              await companyClaimService.addCompanyClaim(newClaim);
-            }
-
-            final totalExpectedPrice = _finalPrices.values.fold<double>(0.0, (sum, item) => sum + (item));
-            final balanceDue = totalExpectedPrice - cashReceived;
-
-            if (balanceDue > 0) {
-              final newArrear = Arrear(
-                id: '',
-                salesmanId: widget.salesman.id,
-                salesmanName: widget.salesman.name,
-                amount: balanceDue,
-                dateIncurred: _selectedDate,
-                description: 'Arrear from stock return on ${DateFormat('yyyy-MM-dd').format(_selectedDate)}',
-              );
-              await salesmanService.addArrear(newArrear);
-            }
+            // Accumulate total claim amount for the day's transactions
+            totalClaimAmount += (_schemeDiscounts[product.id] ?? 0);
+            totalExpectedPrice += (_finalPrices[product.id] ?? 0);
           }
         }
+
+        final cashReceived = double.tryParse(_cashReceivedController.text) ?? 0.0;
+        final balanceDue = totalExpectedPrice - cashReceived;
+
+        // Check for total claim amount and create a single claim for the day
+        if (totalClaimAmount > 0) {
+          final newClaim = CompanyClaim(
+            id: '',
+            type: 'Scheme Amount (Return)',
+            description: 'Consolidated claim for returns on ${DateFormat('yyyy-MM-dd').format(_selectedDate)}',
+            amount: -totalClaimAmount,
+            status: 'Pending',
+            dateIncurred: _selectedDate,
+            brandName: null,
+            productName: null,
+            schemeNames: null,
+            packsAffected: null,
+            companyName: widget.salesman.name,
+          );
+          await companyClaimService.addCompanyClaim(newClaim);
+        }
+
+        if (balanceDue > 0) {
+          final newArrear = Arrear(
+            id: '',
+            salesmanId: widget.salesman.id,
+            salesmanName: widget.salesman.name,
+            amount: balanceDue,
+            dateIncurred: _selectedDate,
+            description: 'Arrear from stock return on ${DateFormat('yyyy-MM-dd').format(_selectedDate)}',
+          );
+          await salesmanService.addArrear(newArrear);
+        }
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Stock Return recorded successfully!')),
@@ -194,7 +202,7 @@ class _RecordStockReturnScreenState extends State<RecordStockReturnScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Record Stock Return for ${widget.salesman.name}'),
+        title: Text(widget.transaction == null ? 'Record Stock Return for ${widget.salesman.name}' : 'Edit Stock Return for ${widget.salesman.name}'),
         actions: [
           IconButton(
             icon: const Icon(Icons.save),

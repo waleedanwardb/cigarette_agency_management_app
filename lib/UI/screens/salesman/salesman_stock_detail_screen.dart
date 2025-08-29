@@ -12,8 +12,9 @@ import 'package:cigarette_agency_management_app/UI/screens/salesman/stock_screen
 import 'package:cigarette_agency_management_app/UI/screens/salesman/transactions_screen.dart';
 import 'package:cigarette_agency_management_app/UI/screens/payments/payments_main_screen.dart';
 
-// NEW: Import the MT screen
+// NEW: Import the MT screen and profile screen
 import 'package:cigarette_agency_management_app/UI/screens/salesman/mt_screen.dart';
+import 'package:cigarette_agency_management_app/UI/screens/salesman/salesman_profile_screen.dart';
 
 
 class SalesmanStockDetailScreen extends StatefulWidget {
@@ -48,10 +49,15 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
+          // NEW: IconButton to navigate to the SalesmanProfileScreen
           IconButton(
             icon: const Icon(Icons.person),
             onPressed: () {
-              // Navigate to salesman profile
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => SalesmanProfileScreen(salesman: widget.salesman),
+                ),
+              );
             },
           ),
         ],
@@ -74,7 +80,7 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
             DashboardScreen(salesman: widget.salesman, allTransactions: allTransactions),
             StockScreen(salesman: widget.salesman),
             TransactionsScreen(salesman: widget.salesman, allTransactions: allTransactions),
-            MTScreen(salesman: widget.salesman), // NEW: MT Screen
+            MTScreen(salesman: widget.salesman),
           ];
 
           return screens[_selectedIndex];
@@ -85,7 +91,7 @@ class _SalesmanStockDetailScreenState extends State<SalesmanStockDetailScreen> {
           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
           BottomNavigationBarItem(icon: Icon(Icons.storage), label: 'Stock'),
           BottomNavigationBarItem(icon: Icon(Icons.swap_horiz), label: 'Transactions'),
-          BottomNavigationBarItem(icon: Icon(Icons.attach_money), label: 'MT'), // Changed 'Finance' to 'MT'
+          BottomNavigationBarItem(icon: Icon(Icons.attach_money), label: 'MT'),
         ],
         currentIndex: _selectedIndex,
         selectedItemColor: Colors.blue,

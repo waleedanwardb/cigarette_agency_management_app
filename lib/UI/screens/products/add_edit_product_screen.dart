@@ -35,21 +35,33 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
     _nameController = TextEditingController(text: widget.product?.name ?? '');
     _priceController = TextEditingController(text: widget.product?.price.toString() ?? '');
     _stockController = TextEditingController(text: widget.product?.stockQuantity.toString() ?? '0');
-    _selectedBrand = widget.brand;
     _initialImageUrl = widget.product?.imageUrl;
 
-    if (widget.product != null && widget.brand == null) {
-      // If editing a product but no brand is passed, fetch the brand
-      _loadBrand();
-    }
+    // FIX: Await the data fetch and set the initial brand synchronously in initState
+    _loadInitialData();
   }
 
-  Future<void> _loadBrand() async {
+  // NEW: Helper function to load data and set initial state
+  Future<void> _loadInitialData() async {
     final brandService = Provider.of<BrandService>(context, listen: false);
     final brands = await brandService.getBrands().first;
-    if (mounted) {
+
+    if (mounted && brands.isNotEmpty) {
+      Brand? initialBrand;
+      if (widget.product != null) {
+        initialBrand = brands.firstWhere(
+              (b) => b.id == widget.product!.brandId,
+          orElse: () => brands.first,
+        );
+      } else if (widget.brand != null) {
+        initialBrand = brands.firstWhere(
+              (b) => b.id == widget.brand!.id,
+          orElse: () => brands.first,
+        );
+      }
+
       setState(() {
-        _selectedBrand = brands.firstWhere((b) => b.id == widget.product!.brandId);
+        _selectedBrand = initialBrand ?? brands.first;
       });
     }
   }
@@ -152,9 +164,35 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
                   if (brands.isEmpty) {
                     return const Text('No brands found. Please add a brand first.');
                   }
+
+                  // FIX: Set the initial value for the dropdown from the stream
+                  if (_selectedBrand == null && widget.product != null) {
+                    try {
+                      _selectedBrand = brands.firstWhere((b) => b.id == widget.product!.brandId);
+                    } catch (e) {
+                      _selectedBrand = brands.first;
+                    }
+                  } else if (widget.brand != null) {
+                    try {
+                      _selectedBrand = brands.firstWhere((b) => b.id == widget.brand!.id);
+                    } catch (e) {
+                      _selectedBrand = brands.first;
+                    }
+                  } else if (_selectedBrand == null) {
+                    _selectedBrand = brands.first;
+                  }
+
+                  // Ensure _selectedBrand is a valid object from the new list
+                  final currentSelectedBrand = brands.firstWhere(
+                        (b) => b.id == (_selectedBrand?.id ?? ''),
+                    orElse: () => brands.first,
+                  );
+
+
                   return DropdownButtonFormField<Brand>(
                     decoration: const InputDecoration(labelText: 'Select Brand', border: OutlineInputBorder()),
-                    value: _selectedBrand,
+                    // FIX: Set the dropdown value to an instance from the live list
+                    value: currentSelectedBrand,
                     onChanged: (Brand? newValue) {
                       setState(() {
                         _selectedBrand = newValue;
@@ -162,6 +200,8 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
                     },
                     items: brands.map((brand) {
                       return DropdownMenuItem<Brand>(
+                        // FIX: Use a unique key for each dropdown item to prevent assertion errors
+                        key: ValueKey(brand.id),
                         value: brand,
                         child: Text(brand.name),
                       );
@@ -184,7 +224,12 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
                 Image.file(_pickedImage!, height: 150),
               ] else if (_initialImageUrl != null && _initialImageUrl!.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                Image.network(_initialImageUrl!, height: 150),
+                Image.network(_initialImageUrl!, height: 150,
+                  // FIX: Add an errorBuilder to prevent crashes on image load failure
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Text('Failed to load image.');
+                  },
+                ),
               ] else ...[
                 const SizedBox(height: 16),
                 const Icon(Icons.image, size: 150, color: Colors.grey),

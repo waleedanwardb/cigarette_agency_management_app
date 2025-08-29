@@ -122,9 +122,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       } else if (transaction.type == 'Stock Return') {
         totalStockReturnPacks += transaction.stockReturnQuantity ?? 0.0;
         // Correctly subtract returned values
-        totalGrossAmount -= transaction.grossPrice?.abs() ?? 0.0;
-        totalSchemeDiscount -= transaction.totalSchemeDiscount?.abs() ?? 0.0;
-        totalFinalAmount -= transaction.calculatedPrice?.abs() ?? 0.0;
+        totalGrossAmount += transaction.grossPrice ?? 0.0;
+        totalSchemeDiscount += transaction.totalSchemeDiscount ?? 0.0;
+        totalFinalAmount += transaction.calculatedPrice ?? 0.0;
       } else if (transaction.type == 'Cash Received') {
         totalCashReceived += transaction.cashReceived ?? 0.0;
       }
@@ -332,21 +332,21 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                     DataColumn(label: Text('Type', style: TextStyle(fontWeight: FontWeight.bold))),
                                     DataColumn(label: Text('Out', style: TextStyle(fontWeight: FontWeight.bold))),
                                     DataColumn(label: Text('Return', style: TextStyle(fontWeight: FontWeight.bold))),
-                                    DataColumn(label: Text('Cash', style: TextStyle(fontWeight: FontWeight.bold))),
-                                    DataColumn(label: Text('Total Price', style: TextStyle(fontWeight: FontWeight.bold))),
-                                    DataColumn(label: Text('Schemes', style: TextStyle(fontWeight: FontWeight.bold))),
+                                    DataColumn(label: Text('Price', style: TextStyle(fontWeight: FontWeight.bold))),
+                                    DataColumn(label: Text('Scheme Discount', style: TextStyle(fontWeight: FontWeight.bold))),
+                                    DataColumn(label: Text('Total/Final', style: TextStyle(fontWeight: FontWeight.bold))),
                                     DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
                                   ],
                                   rows: transactionsForDate.map((t) {
                                     return DataRow(
                                       cells: [
-                                        DataCell(Text(t.productName ?? '-')),
+                                        DataCell(Text(t.productName ?? t.description)),
                                         DataCell(Text(t.type ?? '-')),
                                         DataCell(Text(t.stockOutQuantity?.toStringAsFixed(0) ?? '-')),
                                         DataCell(Text(t.stockReturnQuantity?.toStringAsFixed(0) ?? '-')),
-                                        DataCell(Text(t.cashReceived?.toStringAsFixed(2) ?? '-')),
+                                        DataCell(Text(t.grossPrice?.toStringAsFixed(2) ?? '-')),
+                                        DataCell(Text(t.totalSchemeDiscount?.toStringAsFixed(2) ?? '-')),
                                         DataCell(Text(t.calculatedPrice?.toStringAsFixed(2) ?? '-')),
-                                        DataCell(Text(t.appliedSchemeNames?.join(', ') ?? '-')),
                                         DataCell(
                                           Row(
                                             children: [
@@ -358,7 +358,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                                       MaterialPageRoute(
                                                         builder: (context) => RecordStockOutScreen(
                                                           salesman: widget.salesman,
-                                                          transaction: t, // Pass transaction for editing
+                                                          transaction: t,
                                                         ),
                                                       ),
                                                     );
@@ -367,7 +367,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                                       MaterialPageRoute(
                                                         builder: (context) => RecordStockReturnScreen(
                                                           salesman: widget.salesman,
-                                                          transaction: t, // Pass transaction for editing
+                                                          transaction: t,
                                                         ),
                                                       ),
                                                     );

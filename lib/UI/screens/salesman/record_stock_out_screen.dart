@@ -172,7 +172,7 @@ class _RecordStockOutScreenState extends State<RecordStockOutScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Record Stock Out for ${widget.salesman.name}'),
+        title: Text(widget.transaction == null ? 'Record Stock Out for ${widget.salesman.name}' : 'Edit Stock Out for ${widget.salesman.name}'),
         actions: [
           IconButton(
             icon: const Icon(Icons.save),

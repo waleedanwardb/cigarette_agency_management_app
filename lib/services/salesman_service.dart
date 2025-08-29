@@ -23,30 +23,47 @@ class SalesmanService {
     });
   }
 
-  Future<void> addSalesman(Salesman salesman, {File? profilePic}) async {
+  Future<void> addSalesman(Salesman salesman, {File? profilePic, File? idCardFrontPic, File? idCardBackPic}) async {
     final newSalesmanRef = _salesmanCollection.doc();
-    String? imageUrl;
+    String? profileImageUrl;
+    String? idCardFrontUrl;
+    String? idCardBackUrl;
 
     if (profilePic != null) {
-      imageUrl = await _uploadImage(profilePic, 'salesman_profiles/${newSalesmanRef.id}/profile_pic.jpg');
+      profileImageUrl = await _uploadImage(profilePic, 'salesman_profiles/${newSalesmanRef.id}/profile_pic.jpg');
+    }
+    if (idCardFrontPic != null) {
+      idCardFrontUrl = await _uploadImage(idCardFrontPic, 'salesman_profiles/${newSalesmanRef.id}/id_card_front.jpg');
+    }
+    if (idCardBackPic != null) {
+      idCardBackUrl = await _uploadImage(idCardBackPic, 'salesman_profiles/${newSalesmanRef.id}/id_card_back.jpg');
     }
 
     final salesmanToSave = salesman.copyWith(
       id: newSalesmanRef.id,
-      imageUrl: imageUrl ?? '',
+      imageUrl: profileImageUrl ?? '',
+      // Note: The Salesman model does not have image fields for ID cards. You will need to add them.
     );
 
     await newSalesmanRef.set(salesmanToSave.toFirestore());
   }
 
-  Future<void> updateSalesman(Salesman salesman, {File? profilePic}) async {
-    String? imageUrl = salesman.imageUrl;
+  Future<void> updateSalesman(Salesman salesman, {File? profilePic, File? idCardFrontPic, File? idCardBackPic}) async {
+    String? profileImageUrl = salesman.imageUrl;
+    String? idCardFrontUrl;
+    String? idCardBackUrl;
 
     if (profilePic != null) {
-      imageUrl = await _uploadImage(profilePic, 'salesman_profiles/${salesman.id}/profile_pic.jpg');
+      profileImageUrl = await _uploadImage(profilePic, 'salesman_profiles/${salesman.id}/profile_pic.jpg');
+    }
+    if (idCardFrontPic != null) {
+      idCardFrontUrl = await _uploadImage(idCardFrontPic, 'salesman_profiles/${salesman.id}/id_card_front.jpg');
+    }
+    if (idCardBackPic != null) {
+      idCardBackUrl = await _uploadImage(idCardBackPic, 'salesman_profiles/${salesman.id}/id_card_back.jpg');
     }
 
-    await _salesmanCollection.doc(salesman.id).update(salesman.copyWith(imageUrl: imageUrl).toFirestore());
+    await _salesmanCollection.doc(salesman.id).update(salesman.copyWith(imageUrl: profileImageUrl).toFirestore());
   }
 
   Future<void> deleteSalesman(String salesmanId) async {

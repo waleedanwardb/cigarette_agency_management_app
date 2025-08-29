@@ -1,9 +1,8 @@
 // lib/UI/screens/salesman/add_salesman_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:cigarette_agency_management_app/models/salesman.dart';
 import 'package:cigarette_agency_management_app/services/salesman_service.dart';
@@ -20,24 +19,26 @@ class AddSalesmanScreen extends StatefulWidget {
 class _AddSalesmanScreenState extends State<AddSalesmanScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
-  late TextEditingController _idCardNumberController;
+  late TextEditingController _phoneNumberController;
   late TextEditingController _addressController;
+  late TextEditingController _idCardNumberController;
   late TextEditingController _contactNumberController;
   late TextEditingController _emergencyContactNumberController;
 
-  File? _salesmanPic;
-  File? _idCardFrontPic;
-  File? _idCardBackPic;
-  bool _isLoading = false;
+  File? _pickedProfilePic;
+  File? _pickedIdCardFrontPic;
+  File? _pickedIdCardBackPic;
 
   final ImagePicker _picker = ImagePicker();
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.salesman?.name ?? '');
-    _idCardNumberController = TextEditingController(text: widget.salesman?.idCardNumber ?? '');
+    _phoneNumberController = TextEditingController(text: widget.salesman?.phoneNumber ?? '');
     _addressController = TextEditingController(text: widget.salesman?.address ?? '');
+    _idCardNumberController = TextEditingController(text: widget.salesman?.idCardNumber ?? '');
     _contactNumberController = TextEditingController(text: widget.salesman?.contactNumber ?? '');
     _emergencyContactNumberController = TextEditingController(text: widget.salesman?.emergencyContactNumber ?? '');
   }
@@ -45,58 +46,80 @@ class _AddSalesmanScreenState extends State<AddSalesmanScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _idCardNumberController.dispose();
+    _phoneNumberController.dispose();
     _addressController.dispose();
+    _idCardNumberController.dispose();
     _contactNumberController.dispose();
     _emergencyContactNumberController.dispose();
     super.dispose();
   }
 
-  Future<void> _pickImage(ImageSource source, Function(File?) setImage) async {
-    final XFile? pickedFile = await _picker.pickImage(source: source);
+  Future<void> _pickImage(ImageSource source, Function(File) onPick) async {
+    final pickedFile = await _picker.pickImage(source: source);
     if (pickedFile != null) {
+      if (!mounted) return;
       setState(() {
-        setImage(File(pickedFile.path));
+        onPick(File(pickedFile.path));
       });
     }
   }
 
-  void _addEditSalesman() async {
+  Future<void> _saveSalesman() async {
     if (_formKey.currentState!.validate()) {
+      if (!mounted) return;
       setState(() {
         _isLoading = true;
       });
 
-      final isEditing = widget.salesman != null;
       final salesmanService = Provider.of<SalesmanService>(context, listen: false);
 
-      final newOrUpdatedSalesman = Salesman(
-        id: isEditing ? widget.salesman!.id : '', // Firestore will generate new ID
+      final newSalesman = Salesman(
+        id: widget.salesman?.id ?? '',
         name: _nameController.text.trim(),
-        idCardNumber: _idCardNumberController.text.trim(),
+        phoneNumber: _phoneNumberController.text.trim(),
         address: _addressController.text.trim(),
+        idCardNumber: _idCardNumberController.text.trim(),
         contactNumber: _contactNumberController.text.trim(),
         emergencyContactNumber: _emergencyContactNumberController.text.trim(),
-        isFrozen: isEditing ? widget.salesman!.isFrozen : false,
+        isFrozen: widget.salesman?.isFrozen ?? false,
         imageUrl: widget.salesman?.imageUrl ?? '',
+        idCardFrontUrl: widget.salesman?.idCardFrontUrl ?? '',
+        idCardBackUrl: widget.salesman?.idCardBackUrl ?? '',
       );
 
       try {
-        if (isEditing) {
-          await salesmanService.updateSalesman(newOrUpdatedSalesman, profilePic: _salesmanPic);
+        if (widget.salesman == null) {
+          await salesmanService.addSalesman(
+            newSalesman,
+            profilePic: _pickedProfilePic,
+            idCardFrontPic: _pickedIdCardFrontPic,
+            idCardBackPic: _pickedIdCardBackPic,
+          );
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Salesman added successfully!')),
+          );
         } else {
-          await salesmanService.addSalesman(newOrUpdatedSalesman, profilePic: _salesmanPic);
+          await salesmanService.updateSalesman(
+            newSalesman,
+            profilePic: _pickedProfilePic,
+            idCardFrontPic: _pickedIdCardFrontPic,
+            idCardBackPic: _pickedIdCardBackPic,
+          );
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Salesman updated successfully!')),
+          );
         }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Salesman "${newOrUpdatedSalesman.name}" ${isEditing ? 'updated' : 'added'} successfully!')),
-        );
-        Navigator.pop(context);
+        if (!mounted) return;
+        Navigator.of(context).pop();
       } catch (e) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error: Failed to save salesman data.')),
+          SnackBar(content: Text('Failed to save salesman: $e')),
         );
       } finally {
+        if (!mounted) return;
         setState(() {
           _isLoading = false;
         });
@@ -106,18 +129,9 @@ class _AddSalesmanScreenState extends State<AddSalesmanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isEditing = widget.salesman != null;
-
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEditing ? 'Edit Salesman Profile' : 'Add New Salesman'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-        ),
-        elevation: 0,
+        title: Text(widget.salesman == null ? 'Add Salesman' : 'Edit Salesman'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -126,113 +140,132 @@ class _AddSalesmanScreenState extends State<AddSalesmanScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Profile Picture Section
               Center(
-                child: GestureDetector(
-                  onTap: () => _pickImage(ImageSource.gallery, (file) => _salesmanPic = file),
-                  child: CircleAvatar(
-                    radius: 60,
-                    backgroundColor: Colors.grey[200],
-                    backgroundImage: _salesmanPic != null
-                        ? FileImage(_salesmanPic!)
-                        : (widget.salesman?.imageUrl.isNotEmpty ?? false ? NetworkImage(widget.salesman!.imageUrl) : null) as ImageProvider<Object>?,
-                    child: (_salesmanPic == null && (widget.salesman?.imageUrl.isEmpty ?? true))
-                        ? Icon(Icons.camera_alt, size: 40, color: Colors.grey[600])
-                        : null,
-                  ),
+                child: Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundImage: _pickedProfilePic != null
+                          ? FileImage(_pickedProfilePic!)
+                          : (widget.salesman?.imageUrl != null && widget.salesman!.imageUrl.isNotEmpty
+                          ? NetworkImage(widget.salesman!.imageUrl)
+                          : null) as ImageProvider?,
+                      child: (_pickedProfilePic == null && (widget.salesman?.imageUrl == null || widget.salesman!.imageUrl.isEmpty))
+                          ? const Icon(Icons.person, size: 50)
+                          : null,
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _pickImage(ImageSource.gallery, (file) {
+                        setState(() {
+                          _pickedProfilePic = file;
+                        });
+                      }),
+                      icon: const Icon(Icons.photo),
+                      label: const Text('Pick Profile Picture'),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 10),
-              Center(
-                child: TextButton.icon(
-                  onPressed: () => _pickImage(ImageSource.gallery, (file) => _salesmanPic = file),
-                  icon: const Icon(Icons.upload_file),
-                  label: const Text('Upload Salesman Picture'),
-                ),
-              ),
-              const SizedBox(height: 30),
-
+              const SizedBox(height: 24),
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Salesman Name',
-                  hintText: 'Enter full name',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.person),
-                ),
-                validator: (value) => (value == null || value.isEmpty) ? 'Please enter salesman name' : null,
+                decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder()),
+                validator: (value) => value!.isEmpty ? 'Please enter a name' : null,
               ),
-              const SizedBox(height: 20),
-
+              const SizedBox(height: 16),
               TextFormField(
-                controller: _idCardNumberController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'ID Card Number',
-                  hintText: 'e.g., 12345-6789012-3',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.credit_card),
-                ),
-                validator: (value) => (value == null || value.isEmpty) ? 'Please enter ID card number' : null,
-                readOnly: isEditing,
+                controller: _phoneNumberController,
+                decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder()),
+                keyboardType: TextInputType.phone,
+                validator: (value) => value!.isEmpty ? 'Please enter a phone number' : null,
               ),
-              const SizedBox(height: 20),
-
-              TextFormField(
-                controller: _addressController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Address',
-                  hintText: 'Enter full address',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.home),
-                ),
-                validator: (value) => (value == null || value.isEmpty) ? 'Please enter address' : null,
-              ),
-              const SizedBox(height: 20),
-
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _contactNumberController,
+                decoration: const InputDecoration(labelText: 'Contact Number', border: OutlineInputBorder()),
                 keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Contact Number',
-                  hintText: 'e.g., +923XXYYYYYYY',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.phone),
-                ),
-                validator: (value) => (value == null || value.isEmpty) ? 'Please enter contact number' : null,
+                validator: (value) => value!.isEmpty ? 'Please enter a contact number' : null,
               ),
-              const SizedBox(height: 20),
-
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _emergencyContactNumberController,
+                decoration: const InputDecoration(labelText: 'Emergency Contact Number', border: OutlineInputBorder()),
                 keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Emergency Contact',
-                  hintText: 'e.g., +923XXYYYYYYY',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.emergency),
-                ),
+                validator: (value) => value!.isEmpty ? 'Please enter an emergency contact number' : null,
               ),
-              const SizedBox(height: 30),
-
-              if (_isLoading)
-                const Center(child: CircularProgressIndicator())
-              else
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    onPressed: _addEditSalesman,
-                    icon: Icon(isEditing ? Icons.save : Icons.person_add),
-                    label: Text(isEditing ? 'Update Salesman' : 'Add Salesman'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      elevation: 3,
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _addressController,
+                decoration: const InputDecoration(labelText: 'Address', border: OutlineInputBorder()),
+                validator: (value) => value!.isEmpty ? 'Please enter an address' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _idCardNumberController,
+                decoration: const InputDecoration(labelText: 'ID Card Number', border: OutlineInputBorder()),
+                validator: (value) => value!.isEmpty ? 'Please enter an ID card number' : null,
+              ),
+              const SizedBox(height: 24),
+              // ID Card Images Section
+              const Text('ID Card Images', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _pickedIdCardFrontPic != null
+                            ? Image.file(_pickedIdCardFrontPic!, height: 100, fit: BoxFit.cover)
+                            : (widget.salesman?.idCardFrontUrl != null && widget.salesman!.idCardFrontUrl!.isNotEmpty
+                            ? Image.network(widget.salesman!.idCardFrontUrl!, height: 100, fit: BoxFit.cover)
+                            : const Icon(Icons.image, size: 100, color: Colors.grey)),
+                        ElevatedButton.icon(
+                          onPressed: () => _pickImage(ImageSource.gallery, (file) {
+                            setState(() {
+                              _pickedIdCardFrontPic = file;
+                            });
+                          }),
+                          icon: const Icon(Icons.credit_card),
+                          label: const Text('ID Card Front'),
+                        ),
+                      ],
                     ),
                   ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _pickedIdCardBackPic != null
+                            ? Image.file(_pickedIdCardBackPic!, height: 100, fit: BoxFit.cover)
+                            : (widget.salesman?.idCardBackUrl != null && widget.salesman!.idCardBackUrl!.isNotEmpty
+                            ? Image.network(widget.salesman!.idCardBackUrl!, height: 100, fit: BoxFit.cover)
+                            : const Icon(Icons.image, size: 100, color: Colors.grey)),
+                        ElevatedButton.icon(
+                          onPressed: () => _pickImage(ImageSource.gallery, (file) {
+                            setState(() {
+                              _pickedIdCardBackPic = file;
+                            });
+                          }),
+                          icon: const Icon(Icons.credit_card),
+                          label: const Text('ID Card Back'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _saveSalesman,
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(widget.salesman == null ? 'Add Salesman' : 'Save Changes'),
                 ),
+              ),
             ],
           ),
         ),
