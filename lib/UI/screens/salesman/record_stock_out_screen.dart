@@ -105,8 +105,12 @@ class _RecordStockOutScreenState extends State<RecordStockOutScreen> {
       final companyClaimService = Provider.of<CompanyClaimService>(context, listen: false);
 
       try {
+        double totalSchemeDiscount = 0.0;
+        List<String> consolidatedSchemeNames = [];
+
         for (var product in _allProducts) {
           final quantity = double.tryParse(_quantityControllers[product.id]!.text) ?? 0.0;
+
           if (quantity > 0) {
             final newTransaction = SalesmanAccountTransaction(
               id: widget.transaction?.id ?? '',
@@ -129,24 +133,30 @@ class _RecordStockOutScreenState extends State<RecordStockOutScreen> {
               await salesmanService.updateSalesmanTransaction(widget.salesman.id, newTransaction);
             }
 
-            if (_schemeDiscounts[product.id]! > 0) {
-              final newClaim = CompanyClaim(
-                id: '',
-                type: 'Scheme Amount',
-                description: 'Claim for scheme discount on ${product.name}',
-                amount: _schemeDiscounts[product.id]!,
-                status: 'Pending',
-                dateIncurred: _selectedDate,
-                brandName: product.brand,
-                productName: product.name,
-                schemeNames: _appliedSchemes[product.id]!.map((s) => s.name).toList(),
-                packsAffected: quantity,
-                companyName: product.brand,
-              );
-              await companyClaimService.addCompanyClaim(newClaim);
-            }
+            // Accumulate scheme discounts for a single claim
+            totalSchemeDiscount += _schemeDiscounts[product.id]!;
+            consolidatedSchemeNames.addAll(_appliedSchemes[product.id]!.map((s) => s.name).toList());
           }
         }
+
+        // Create a single company claim for the consolidated scheme discounts
+        if (totalSchemeDiscount > 0) {
+          final newClaim = CompanyClaim(
+            id: '',
+            type: 'Scheme Amount',
+            description: 'Consolidated claim for stock out on ${DateFormat('yyyy-MM-dd').format(_selectedDate)}',
+            amount: totalSchemeDiscount,
+            status: 'Pending',
+            dateIncurred: _selectedDate,
+            brandName: null,
+            productName: null,
+            schemeNames: consolidatedSchemeNames.toSet().toList(),
+            packsAffected: null,
+            companyName: null,
+          );
+          await companyClaimService.addCompanyClaim(newClaim);
+        }
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Stock Out recorded successfully!')),

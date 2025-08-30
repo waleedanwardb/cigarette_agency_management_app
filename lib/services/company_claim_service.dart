@@ -1,6 +1,7 @@
 // lib/services/company_claim_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cigarette_agency_management_app/models/company_claim.dart';
+import 'package:flutter/material.dart';
 
 class CompanyClaimService {
   final CollectionReference _claimsCollection =
@@ -21,6 +22,7 @@ class CompanyClaimService {
   }
 
   Future<void> deleteCompanyClaim(String claimId) async {
+    debugPrint('Attempting to delete claim with ID: $claimId from collection: company_claims');
     await _claimsCollection.doc(claimId).delete();
   }
 }

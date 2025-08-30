@@ -111,6 +111,8 @@ class _RecordStockReturnScreenState extends State<RecordStockReturnScreen> {
       try {
         double totalClaimAmount = 0.0;
         double totalExpectedPrice = 0.0;
+        List<String> consolidatedSchemeNames = [];
+
         for (var product in _allProducts) {
           final quantity = double.tryParse(_quantityControllers[product.id]!.text) ?? 0.0;
           final cashReceived = double.tryParse(_cashReceivedController.text) ?? 0.0;
@@ -138,9 +140,10 @@ class _RecordStockReturnScreenState extends State<RecordStockReturnScreen> {
               await salesmanService.updateSalesmanTransaction(widget.salesman.id, newTransaction);
             }
 
-            // Accumulate total claim amount for the day's transactions
+            // Accumulate total claim amount and scheme names for a single claim
             totalClaimAmount += (_schemeDiscounts[product.id] ?? 0);
             totalExpectedPrice += (_finalPrices[product.id] ?? 0);
+            consolidatedSchemeNames.addAll(_appliedSchemes[product.id]!.map((s) => s.name).toList());
           }
         }
 
@@ -158,7 +161,7 @@ class _RecordStockReturnScreenState extends State<RecordStockReturnScreen> {
             dateIncurred: _selectedDate,
             brandName: null,
             productName: null,
-            schemeNames: null,
+            schemeNames: consolidatedSchemeNames.toSet().toList(),
             packsAffected: null,
             companyName: widget.salesman.name,
           );

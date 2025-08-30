@@ -21,6 +21,7 @@ class _CompanyClaimsScreenState extends State<CompanyClaimsScreen> {
   String? _filterCategory;
   DateTime? _filterStartDate;
   DateTime? _filterEndDate;
+  bool _isDeleting = false;
 
   // Method to group claims by type for a grouped list view
   Map<String, List<CompanyClaim>> _groupClaimsByType(List<CompanyClaim> claims) {
@@ -133,6 +134,63 @@ class _CompanyClaimsScreenState extends State<CompanyClaimsScreen> {
     );
   }
 
+  // New method to delete all claims
+  Future<void> _deleteAllClaims(List<CompanyClaim> claims) async {
+    final claimService = Provider.of<CompanyClaimService>(context, listen: false);
+
+    if (claims.isEmpty) {
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No claims to delete.')),
+        );
+      }
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Confirm Delete All'),
+          content: Text('Are you sure you want to delete all ${claims.length} claims? This action cannot be undone.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Delete All'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      setState(() => _isDeleting = true);
+      try {
+        for (var claim in claims) {
+          await claimService.deleteCompanyClaim(claim.id);
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('All claims deleted successfully!')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to delete claims: $e')),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isDeleting = false);
+        }
+      }
+    }
+  }
+
+
   // Method to show add claim options with a bottom sheet
   void _showAddClaimOptions() {
     showModalBottomSheet(
@@ -174,6 +232,14 @@ class _CompanyClaimsScreenState extends State<CompanyClaimsScreen> {
         elevation: 0,
         actions: [
           IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            tooltip: 'Delete All Claims',
+            onPressed: _isDeleting ? null : () async {
+              final allClaims = await companyClaimService.getCompanyClaims().first;
+              _deleteAllClaims(allClaims);
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.check_circle_outline),
             tooltip: 'Mark all pending as claimed',
             onPressed: () async {
@@ -184,7 +250,9 @@ class _CompanyClaimsScreenState extends State<CompanyClaimsScreen> {
           ),
         ],
       ),
-      body: StreamBuilder<List<CompanyClaim>>(
+      body: _isDeleting
+          ? const Center(child: CircularProgressIndicator())
+          : StreamBuilder<List<CompanyClaim>>(
         stream: companyClaimService.getCompanyClaims(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -363,4 +431,5 @@ class _CompanyClaimsScreenState extends State<CompanyClaimsScreen> {
       ),
     );
   }
+
 }
